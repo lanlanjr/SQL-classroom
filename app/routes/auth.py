@@ -1,17 +1,11 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, make_response
 from flask_login import login_user, logout_user, current_user, login_required
-from werkzeug.urls import url_parse
+from urllib.parse import urlparse
 from app import db
 from app.models import User, Section, StudentEnrollment
 from flask_login import user_logged_in
 from flask import current_app, jsonify
 import os
-
-# Update the url_parse import to handle both old and new Werkzeug versions
-try:
-    from werkzeug.urls import url_parse
-except ImportError:
-    from urllib.parse import urlparse as url_parse
 
 auth = Blueprint('auth', __name__)
 
@@ -84,7 +78,7 @@ def login():
         if user and user.check_password(password):
             login_user(user, remember=request.form.get('remember_me'))
             next_page = request.args.get('next')
-            if not next_page or url_parse(next_page).netloc != '':
+            if not next_page or urlparse(next_page).netloc != '':
                 if user.is_teacher():
                     next_page = url_for('teacher.dashboard')
                 else:
