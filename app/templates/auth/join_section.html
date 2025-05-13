@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+
+{% block title %}Join Classroom - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Join a New Classroom</h4>
+                </div>
+                <div class="card-body">
+                    <p class="mb-4">
+                        Enter the invitation token provided by your teacher to join a classroom. 
+                        If you have a full invitation link, simply click on that link instead.
+                    </p>
+                    <form action="{{ url_for('auth.join_token_submit') }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="token" class="form-label">Invitation Token</label>
+                            <input type="text" class="form-control" id="token" name="token" required>
+                            <div class="form-text">
+                                The token is a long string of characters you received from your teacher.
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">Join Classroom</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,81 @@
+{% extends "layout.html" %}
+
+{% block title %}Sections - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Class Sections</h1>
+    <div>
+        <a href="{{ url_for('teacher.new_section') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i> New Section
+        </a>
+        <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-outline-secondary ms-2">
+            <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<div class="card shadow">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Your Sections</h5>
+    </div>
+    <div class="card-body">
+        {% if sections %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Section Name</th>
+                            <th>Description</th>
+                            <th>Students</th>
+                            <th>Assignments</th>
+                            <th>Created At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for section in sections %}
+                            {% set stats = section_stats[section.id] %}
+                            <tr>
+                                <td>{{ section.name }}</td>
+                                <td>{{ section.description|truncate(50) if section.description else 'No description' }}</td>
+                                <td>
+                                    <span class="badge bg-info">{{ stats.student_count }} student(s)</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary">{{ stats.assignment_count }} assignment(s)</span>
+                                </td>
+                                <td>{{ section.created_at.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <a href="{{ url_for('teacher.view_section', section_id=section.id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                        <a href="{{ url_for('teacher.edit_section', section_id=section.id) }}" class="btn btn-sm btn-warning">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <a href="{{ url_for('teacher.manage_section_students', section_id=section.id) }}" class="btn btn-sm btn-info">
+                                            <i class="fas fa-users"></i> Students
+                                        </a>
+                                        <a href="{{ url_for('teacher.manage_section_assignments', section_id=section.id) }}" class="btn btn-sm btn-success">
+                                            <i class="fas fa-clipboard-list"></i> Assignments
+                                        </a>
+                                        <a href="{{ url_for('teacher.export_section_results', section_id=section.id) }}" class="btn btn-sm btn-info">
+                                            <i class="fas fa-file-excel"></i> Export Results
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i> You haven't created any sections yet.
+                <a href="{{ url_for('teacher.new_section') }}" class="alert-link">Create your first section!</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 

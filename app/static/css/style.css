@@ -1,0 +1,107 @@
+/* Main styles for SQL Classroom */
+
+/* General styles */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+
+main {
+    flex: 1 0 auto;
+}
+
+.footer {
+    flex-shrink: 0;
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 0;
+    margin-top: 2rem;
+}
+
+/* CodeMirror customizations */
+.CodeMirror {
+    font-family: 'Fira Code', monospace;
+    font-size: 14px;
+    height: 200px;
+}
+
+/* Dashboard cards */
+.card {
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+/* Question difficulty stars */
+.difficulty-stars .fa-star {
+    margin-right: 2px;
+}
+
+/* SQL Terminal styles */
+.terminal-container {
+    border-radius: 0 0 5px 5px;
+}
+
+.terminal-result {
+    margin-top: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Custom button styles */
+.btn-execute {
+    background-color: #28a745;
+    color: white;
+}
+
+.btn-execute:hover {
+    background-color: #218838;
+}
+
+/* Table styles */
+.table-result {
+    overflow-x: auto;
+}
+
+.table-result table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-result th {
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+}
+
+/* Form styles */
+.form-label {
+    font-weight: 500;
+}
+
+.form-text {
+    font-size: 0.85rem;
+}
+
+/* Navbar styles */
+.navbar-dark .navbar-nav .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #ffffff;
+}
+
+.navbar-dark .navbar-nav .dropdown-item.active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+/* Hover effect for nav items */
+.navbar-dark .navbar-nav .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+} 

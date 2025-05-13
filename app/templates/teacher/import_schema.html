@@ -1,0 +1,102 @@
+{% extends "layout.html" %}
+
+{% block title %}Import MySQL Schema - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Import MySQL Schema</h1>
+    <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-body">
+                <h5 class="card-title">Import Schema File</h5>
+                <p class="card-text text-muted">
+                    Upload a MySQL schema file to create a new database. This database can then be used in SQL questions.
+                </p>
+                
+                <form method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label for="database_name" class="form-label">Database Name</label>
+                        <input type="text" class="form-control" id="database_name" name="database_name" 
+                               pattern="[a-zA-Z0-9_]+" title="Only letters, numbers, and underscores allowed"
+                               required>
+                        <div class="form-text">
+                            Enter a name for the new database. Use only letters, numbers, and underscores.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="schema_file" class="form-label">Schema File</label>
+                        <input type="file" class="form-control" id="schema_file" name="schema_file" 
+                               accept=".sql" required>
+                        <div class="form-text">
+                            Upload a .sql file containing your database schema.
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload me-2"></i> Import Schema
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-body">
+                <h5 class="card-title">Instructions</h5>
+                <div class="card-text">
+                    <p><strong>Schema File Format:</strong></p>
+                    <ul>
+                        <li>File must be a valid MySQL schema (.sql)</li>
+                        <li>Should contain CREATE TABLE statements</li>
+                        <li>Can include sample data (INSERT statements)</li>
+                        <li>Avoid using admin-level commands</li>
+                    </ul>
+                    
+                    <p><strong>After Import:</strong></p>
+                    <ul>
+                        <li>Database will be created automatically</li>
+                        <li>Student access will be restricted to SELECT operations</li>
+                        <li>Use the database name when creating MySQL questions</li>
+                    </ul>
+                    
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        The imported database will be available for all your MySQL-based questions.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-format database name to be MySQL compatible
+    const dbNameInput = document.getElementById('database_name');
+    dbNameInput.addEventListener('input', function() {
+        this.value = this.value.replace(/[^a-zA-Z0-9_]/g, '_');
+    });
+    
+    // File type validation
+    const schemaFileInput = document.getElementById('schema_file');
+    schemaFileInput.addEventListener('change', function() {
+        if (!this.value.toLowerCase().endsWith('.sql')) {
+            alert('Please select a .sql file');
+            this.value = '';
+        }
+    });
+});
+</script>
+{% endblock %} 

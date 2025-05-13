@@ -1,0 +1,185 @@
+{% extends "layout.html" %}
+
+{% block title %}Questions - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Questions</h1>
+    <div>
+        <a href="{{ url_for('teacher.new_question') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i> New Question
+        </a>
+        <a href="{{ url_for('teacher.simple_new_question') }}" class="btn btn-outline-success ms-2">
+            <i class="fas fa-plus me-2"></i> Simple New Question
+        </a>
+    </div>
+</div>
+
+{% if questions %}
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="questions-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th class="sortable" data-field="title">
+                                Question <i class="fas fa-sort text-muted"></i>
+                            </th>
+                            <th class="sortable" data-field="difficulty">
+                                Difficulty <i class="fas fa-sort text-muted"></i>
+                            </th>
+                            <th class="sortable" data-field="created_at">
+                                Created Date <i class="fas fa-sort text-muted"></i>
+                            </th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for question in questions %}
+                            <tr data-title="{{ question.title }}" data-difficulty="{{ question.difficulty }}" data-created-at="{{ question.created_at.strftime('%Y-%m-%d') }}">
+                                <td>{{ loop.index }}</td>
+                                <td>
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h5 class="card-title">{{ question.title }}</h5>
+                                            <p class="card-text text-muted small">{{ question.description|striptags|truncate(120) }}</p>
+                                        </div>
+                                        <div class="d-flex flex-column align-items-end">
+                                            <div class="badges mb-2">
+                                                <span class="badge {% if question.db_type == 'mysql' %}bg-info{% else %}bg-success{% endif %}">
+                                                    {{ question.db_type }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">
+                                        Difficulty: 
+                                        {% for i in range(1, 6) %}
+                                            {% if i <= question.difficulty %}
+                                                <i class="fas fa-star text-warning"></i>
+                                            {% else %}
+                                                <i class="far fa-star"></i>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </span>
+                                </td>
+                                <td>{{ question.created_at.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('teacher.edit_question', question_id=question.id) }}" class="btn btn-sm btn-warning">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <button class="btn btn-sm btn-danger delete-question" 
+                                                data-id="{{ question.id }}"
+                                                data-title="{{ question.title }}">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i> You haven't created any questions yet. 
+        <a href="{{ url_for('teacher.new_question') }}">Create your first question</a>.
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block styles %}
+<style>
+    .sortable {
+        cursor: pointer;
+    }
+    .sortable:hover {
+        background-color: #f8f9fa;
+    }
+    .sortable.sort-asc .fa-sort:before {
+        content: "\f0de"; /* fa-sort-up */
+    }
+    .sortable.sort-desc .fa-sort:before {
+        content: "\f0dd"; /* fa-sort-down */
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add event listeners to all delete buttons
+        const deleteButtons = document.querySelectorAll('.delete-question');
+        deleteButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const questionId = this.getAttribute('data-id');
+                const questionTitle = this.getAttribute('data-title');
+                
+                if (confirm('Are you sure you want to delete the question "' + questionTitle + '"? This action cannot be undone.')) {
+                    window.location.href = "/teacher/questions/delete/" + questionId;
+                }
+            });
+        });
+        
+        // Table sorting functionality
+        const table = document.getElementById('questions-table');
+        const sortableHeaders = document.querySelectorAll('th.sortable');
+        
+        sortableHeaders.forEach(header => {
+            header.addEventListener('click', function() {
+                const field = this.getAttribute('data-field');
+                const currentOrder = this.getAttribute('data-order') || 'none';
+                
+                // Remove sorting from all headers
+                sortableHeaders.forEach(h => {
+                    h.classList.remove('sort-asc', 'sort-desc');
+                    h.setAttribute('data-order', 'none');
+                });
+                
+                // Set new order
+                let newOrder;
+                if (currentOrder === 'none' || currentOrder === 'desc') {
+                    newOrder = 'asc';
+                    this.classList.add('sort-asc');
+                } else {
+                    newOrder = 'desc';
+                    this.classList.add('sort-desc');
+                }
+                
+                this.setAttribute('data-order', newOrder);
+                
+                // Get all rows
+                const rows = Array.from(table.querySelectorAll('tbody tr'));
+                
+                // Sort rows
+                rows.sort((a, b) => {
+                    let valueA = a.getAttribute('data-' + field);
+                    let valueB = b.getAttribute('data-' + field);
+                    
+                    // For difficulty, convert to number
+                    if (field === 'difficulty') {
+                        valueA = parseInt(valueA);
+                        valueB = parseInt(valueB);
+                        return newOrder === 'asc' ? valueA - valueB : valueB - valueA;
+                    }
+                    
+                    // For text fields
+                    return newOrder === 'asc' 
+                        ? valueA.localeCompare(valueB) 
+                        : valueB.localeCompare(valueA);
+                });
+                
+                // Reorder the rows
+                const tbody = table.querySelector('tbody');
+                rows.forEach(row => tbody.appendChild(row));
+            });
+        });
+    });
+</script>
+{% endblock %} 

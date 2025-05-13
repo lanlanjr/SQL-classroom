@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+
+{% block title %}Manage Students - {{ section.name }} - SQL Classroom{% endblock %}
+
+{% block styles %}
+<style>
+    .student-select {
+        min-height: 400px;
+    }
+    .unavailable-students {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Manage Students in {{ section.name }}</h1>
+    <a href="{{ url_for('teacher.view_section', section_id=section.id) }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Back to Section
+    </a>
+</div>
+
+<div class="card shadow">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Select Students for this Section</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('teacher.manage_section_students', section_id=section.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <span>Students can only be in one section at a time. Only unassigned students and students already in this section are available for selection.</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="form-group">
+                        <label for="student-select">Available Students</label>
+                        <select multiple class="form-select student-select" id="student-select" name="student_ids">
+                            {% for student in all_students %}
+                                <option value="{{ student.id }}" 
+                                        {% if student.id in current_student_ids %}selected{% endif %}>
+                                    {{ student.username }} ({{ student.email }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Hold <kbd>Ctrl</kbd> (or <kbd>⌘</kbd> on Mac) to select multiple students.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {% if assigned_elsewhere_students %}
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <div class="card border-warning">
+                        <div class="card-header bg-warning text-dark">
+                            <h6 class="mb-0">Students Assigned to Other Sections</h6>
+                        </div>
+                        <div class="card-body unavailable-students">
+                            <p class="text-muted">The following students are already assigned to other sections and cannot be added to this section unless they are removed from their current section:</p>
+                            <ul class="list-group">
+                                {% for student in assigned_elsewhere_students %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        {{ student.username }} ({{ student.email }})
+                                        <span class="badge bg-secondary">Section ID: {{ student.section_id }}</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-3">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save me-2"></i> Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %} 

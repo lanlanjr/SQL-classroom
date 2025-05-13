@@ -1,0 +1,82 @@
+{% extends "layout.html" %}
+
+{% block title %}Student Management - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Student Management</h1>
+    <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+    </a>
+</div>
+
+<div class="card shadow">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Students</h5>
+    </div>
+    <div class="card-body">
+        {% if students %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Student Name</th>
+                            <th>Email</th>
+                            <th>Assignments</th>
+                            <th>Submissions</th>
+                            <th>Success Rate</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                            {% set student_stats = stats[student.id] %}
+                            <tr>
+                                <td>{{ student.last_name ~ ' ' ~ student.first_name if student.last_name and student.first_name else student.username }}</td>
+                                <td>{{ student.email }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 10px;">
+                                            {% set assignment_progress = (student_stats.started_assignments / student_stats.total_assignments * 100)|int if student_stats.total_assignments > 0 else 0 %}
+                                            <div class="progress-bar bg-primary" role="progressbar" style="width: {{ assignment_progress }}%;" 
+                                                aria-valuenow="{{ assignment_progress }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                        <span class="small">{{ student_stats.started_assignments }}/{{ student_stats.total_assignments }}</span>
+                                    </div>
+                                </td>
+                                <td>{{ student_stats.total_submissions }}</td>
+                                <td>
+                                    {% if student_stats.total_submissions > 0 %}
+                                        {% set success_rate = (student_stats.correct_submissions / student_stats.total_submissions * 100)|int %}
+                                        
+                                        {% if success_rate >= 75 %}
+                                            <span class="badge bg-success">{{ success_rate }}%</span>
+                                        {% elif success_rate >= 50 %}
+                                            <span class="badge bg-warning">{{ success_rate }}%</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ success_rate }}%</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('teacher.view_student', student_id=student.id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-user me-1"></i> View Details
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i> No students have registered in the system yet.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 

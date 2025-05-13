@@ -1,0 +1,213 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ assignment.title }} - SQL Classroom{% endblock %}
+
+{% block styles %}
+<style>
+    .progress-bar-container {
+        height: 10px;
+    }
+    .completion-progress-bar {
+        width: {{ percent }}%;
+    }
+    .score-progress-bar {
+        width: {{ score_percent }}%;
+    }
+    
+    /* Description preview styles */
+    .description-preview {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    /* Question item styles */
+    .list-group-item {
+        transition: background-color 0.2s ease;
+    }
+    .list-group-item:hover {
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set is_past_due = assignment.due_date and assignment.due_date < now %}
+{% set total_points = assignment_questions|sum(attribute='score') %}
+{# Use the pre-calculated earned_points instead of calculating in the template #}
+{# {% set earned_points = 0 %}
+{% for aq in assignment_questions %}
+    {% if aq.question_id in submissions_by_question and submissions_by_question[aq.question_id].is_correct %}
+        {% set earned_points = earned_points + aq.score %}
+    {% endif %}
+{% endfor %} #}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+        {{ assignment.title }}
+        {% if is_past_due %}
+            <span class="badge bg-danger ms-2">Past Due</span>
+        {% endif %}
+    </h1>
+    <a href="{{ url_for('student.dashboard') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+    </a>
+</div>
+
+{% if is_past_due %}
+<div class="alert alert-danger mb-4">
+    <i class="fas fa-exclamation-triangle me-2"></i> This assignment is past its due date. You can view your previous submissions, but you cannot make new submissions.
+</div>
+{% endif %}
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Assignment Information</h5>
+            </div>
+            <div class="card-body">
+                {% if assignment.description %}
+                    <p>{{ assignment.description }}</p>
+                {% endif %}
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <p><strong>Due Date:</strong> 
+                            {% if assignment.due_date %}
+                                {{ assignment.due_date.strftime('%Y-%m-%d %I:%M %p') }}
+                                {% if is_past_due %}
+                                    <span class="badge bg-danger ms-2">Past Due</span>
+                                {% else %}
+                                    <span class="badge bg-success ms-2">Open</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">No due date</span>
+                            {% endif %}
+                        </p>
+                        <p><strong>Classroom:</strong> {{ section.name }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Questions:</strong> {{ assignment_questions|length }}</p>
+                        <p><strong>Total Points:</strong> {{ total_points }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Your Progress</h5>
+            </div>
+            <div class="card-body">
+                {% set submitted = submissions_by_question|length %}
+                {% set total = assignment_questions|length %}
+                {% set percent = (submitted / total * 100)|int if total > 0 else 0 %}
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Completion</span>
+                        <span>{{ submitted }}/{{ total }} ({{ percent }}%)</span>
+                    </div>
+                    <div class="progress progress-bar-container">
+                        <div class="progress-bar {{ 'bg-success' if percent == 100 else 'bg-primary' }}" 
+                             role="progressbar" 
+                             aria-valuenow="{{ percent }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100"
+                             style="width: {{ percent }}%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Score</span>
+                        <span>{{ earned_points }}/{{ total_points }} points</span>
+                    </div>
+                    <div class="progress progress-bar-container">
+                        {% set score_percent = (earned_points / total_points * 100)|int if total_points > 0 else 0 %}
+                        <div class="progress-bar bg-success" 
+                             role="progressbar"
+                             aria-valuenow="{{ score_percent }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100"
+                             style="width: {{ score_percent }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Questions List -->
+<div class="card shadow">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Questions</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+            {% for question in questions %}
+                {% set loop_index = loop.index0 %}
+                {% set aq = assignment_questions[loop_index] %}
+                {% set submission = submissions_by_question.get(question.id) %}
+                <div class="list-group-item p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1 me-3">
+                            <h5 class="mb-1">{{ loop.index }}. {{ question.title }}</h5>
+                            <p class="text-muted mb-1 description-preview">
+                                {% set description = question.description|striptags|truncate(150, true, '...') %}
+                                {{ description }}
+                            </p>
+                            <div class="mt-2">
+                                <span class="badge bg-secondary me-2">
+                                    Difficulty: 
+                                    {% for i in range(1, 6) %}
+                                        {% if i <= question.difficulty %}
+                                            <i class="fas fa-star text-warning"></i>
+                                        {% else %}
+                                            <i class="far fa-star"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                </span>
+                                <span class="badge bg-info">{{ aq.score }} points</span>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <div class="mb-2">
+                                {% if submission %}
+                                    {% if submission.is_correct %}
+                                        <span class="badge bg-success">Correct ({{ aq.score }} points)</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Incorrect (0/{{ aq.score }} points)</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">Not Attempted</span>
+                                {% endif %}
+                            </div>
+                            <a href="{{ url_for('student.view_question', question_id=question.id, assignment_id=assignment.id) }}" 
+                                class="btn btn-primary btn-sm {% if is_past_due %}disabled{% endif %}">
+                                {% if submission %}
+                                    {% if submission.is_correct %}
+                                        View
+                                    {% else %}
+                                        Try Again
+                                    {% endif %}
+                                {% else %}
+                                    Solve
+                                {% endif %}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

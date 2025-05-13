@@ -1,0 +1,438 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ assignment.title }} - SQL Classroom{% endblock %}
+
+{% block styles %}
+<style>
+    pre {
+        margin-bottom: 0;
+        white-space: pre-wrap;
+    }
+    .sql-code {
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 10px;
+        max-height: 200px;
+        overflow-y: auto;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+    }
+    .expand-btn {
+        min-width: 40px;
+    }
+    .submission-row td {
+        vertical-align: top;
+        word-break: break-word;
+    }
+    .question-content, .answer-content {
+        width: 100%;
+    }
+    pre code {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    .col-question {
+        width: 30%;
+    }
+    .col-points {
+        width: 10%;
+    }
+    .col-answer {
+        width: 35%;
+    }
+    .col-status {
+        width: 10%;
+    }
+    .col-date {
+        width: 15%;
+    }
+    /* Make images responsive */
+    .card-body img, 
+    .sql-code img,
+    .question-content img,
+    .answer-content img,
+    .accordion-body img,
+    .lead img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0.5rem 0;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    
+    /* Add hover effect to indicate clickability */
+    .card-body img:hover, 
+    .sql-code img:hover,
+    .question-content img:hover,
+    .answer-content img:hover,
+    .accordion-body img:hover,
+    .lead img:hover {
+        transform: scale(1.02);
+    }
+    
+    /* Image modal styles */
+    .image-modal {
+        display: none;
+        position: fixed;
+        z-index: 1050;
+        padding-top: 50px;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.9);
+        text-align: center;
+    }
+    
+    .modal-content {
+        margin: auto;
+        display: block;
+        max-width: 90%;
+        max-height: 90%;
+        object-fit: contain;
+        box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    }
+    
+    .modal-close {
+        position: absolute;
+        top: 15px;
+        right: 35px;
+        color: #f1f1f1;
+        font-size: 40px;
+        font-weight: bold;
+        cursor: pointer;
+        text-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ assignment.title }}</h1>
+    <div>
+        <a href="{{ url_for('teacher.edit_assignment', assignment_id=assignment.id) }}" class="btn btn-warning">
+            <i class="fas fa-edit me-2"></i> Edit Assignment
+        </a>
+        <a href="{{ url_for('teacher.assignments') }}" class="btn btn-outline-secondary ms-2">
+            <i class="fas fa-arrow-left me-2"></i> Back to Assignments
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4 shadow">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Assignment Details</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <p class="lead">
+                    {% if assignment.description %}
+                        {{ assignment.description }}
+                    {% else %}
+                        <span class="text-muted">No description provided</span>
+                    {% endif %}
+                </p>
+            </div>
+            <div class="col-md-4">
+                <ul class="list-group">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Questions
+                        <span class="badge bg-primary rounded-pill">{{ questions|length }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Points
+                        <span class="badge bg-info rounded-pill">{{ assignment_questions|sum(attribute='score') }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Created
+                        <span>{{ assignment.created_at.strftime('%Y-%m-%d') }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Due Date
+                        {% if assignment.due_date %}
+                            <span>{{ assignment.due_date.strftime('%Y-%m-%d %I:%M %p') }}</span>
+                        {% else %}
+                            <span class="text-muted">No due date</span>
+                        {% endif %}
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Questions Section -->
+<div class="card mb-4 shadow">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Questions</h5>
+    </div>
+    <div class="card-body">
+        {% if questions %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Question</th>
+                            <th>Points</th>
+                            <th>Difficulty</th>
+                            <th>Database Type</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for question in questions %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ question.title }}</td>
+                                <td>
+                                    <span class="badge bg-info">{{ assignment_questions[loop.index0].score }}</span>
+                                </td>
+                                <td>
+                                    {% for j in range(1, 6) %}
+                                        {% if j <= question.difficulty %}
+                                            <i class="fas fa-star text-warning"></i>
+                                        {% else %}
+                                            <i class="far fa-star"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ question.db_type }}</span>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('teacher.edit_question', question_id=question.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i> This assignment doesn't have any questions yet.
+                <a href="{{ url_for('teacher.edit_assignment', assignment_id=assignment.id) }}">Edit the assignment</a> to add questions.
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Student Submissions Section -->
+<div class="card shadow">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Student Submissions</h5>
+    </div>
+    <div class="card-body">
+        {% if submissions_by_student %}
+            <div class="accordion" id="submissionsAccordion">
+                {% for student_id, student_submissions in submissions_by_student.items() %}
+                    {% set student = students[student_id] %}
+                    {# Use pre-calculated scores instead of computing in the template #}
+                    {% set student_score = student_scores[student_id] %}
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading{{ student_id }}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                   data-bs-target="#collapse{{ student_id }}" aria-expanded="false" aria-controls="collapse{{ student_id }}">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <span>{{ student.last_name ~ ' ' ~ student.first_name if student.last_name and student.first_name else student.username }}</span>
+                                    {% set correct_count = student_submissions|selectattr('is_correct')|list|length %}
+                                    <span>
+                                        <span class="badge bg-success me-1">{{ correct_count }} correct</span>
+                                        <span class="badge bg-danger">{{ student_submissions|length - correct_count }} incorrect</span>
+                                        <span class="badge bg-info ms-1">Score: {{ student_score }}/{{ max_score }}</span>
+                                        <a href="{{ url_for('teacher.view_student', student_id=student_id) }}" class="btn btn-sm btn-outline-primary ms-2">View Student</a>
+                                    </span>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="collapse{{ student_id }}" class="accordion-collapse collapse" 
+                             aria-labelledby="heading{{ student_id }}" data-bs-parent="#submissionsAccordion">
+                            <div class="accordion-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th class="col-question">Question</th>
+                                                <th class="col-points">Points</th>
+                                                <th class="col-answer">Submitted Answer</th>
+                                                <th class="col-status">Status</th>
+                                                <th class="col-date">Submitted At</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for submission in student_submissions %}
+                                                {% set question = submission.question %}
+                                                <tr class="submission-row">
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <button class="btn btn-sm btn-outline-secondary me-2 expand-btn" type="button" 
+                                                                data-bs-toggle="collapse" data-bs-target="#question-{{ student_id }}-{{ submission.id }}" 
+                                                                aria-expanded="false">
+                                                                <i class="fas fa-chevron-down"></i>
+                                                            </button>
+                                                            <span>{{ question.title }}</span>
+                                                        </div>
+                                                        <div class="collapse mt-2 question-content" id="question-{{ student_id }}-{{ submission.id }}">
+                                                            <div class="card card-body bg-light">
+                                                                <h6>Question:</h6>
+                                                                <p>{{ question.description|safe }}</p>
+                                                                <h6>Correct Answer:</h6>
+                                                                <div class="sql-code">
+                                                                    <pre><code class="sql">{{ question.correct_answer }}</code></pre>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        {% set found = false %}
+                                                        {% for aq in assignment_questions %}
+                                                            {% if not found and aq.question_id == question.id %}
+                                                                {% if submission.is_correct %}
+                                                                    <span class="badge bg-success">{{ aq.score }}</span>
+                                                                {% else %}
+                                                                    <span class="badge bg-secondary">0/{{ aq.score }}</span>
+                                                                {% endif %}
+                                                                {% set found = true %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </td>
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <button class="btn btn-sm btn-outline-secondary me-2 expand-btn" type="button" 
+                                                                data-bs-toggle="collapse" data-bs-target="#answer-{{ student_id }}-{{ submission.id }}" 
+                                                                aria-expanded="false">
+                                                                <i class="fas fa-chevron-down"></i>
+                                                            </button>
+                                                            <code class="small">{{ submission.submitted_answer|truncate(30) }}</code>
+                                                        </div>
+                                                        <div class="collapse mt-2 answer-content" id="answer-{{ student_id }}-{{ submission.id }}">
+                                                            <div class="card card-body bg-light">
+                                                                <div class="sql-code">
+                                                                    <pre><code class="sql">{{ submission.submitted_answer }}</code></pre>
+                                                                </div>
+                                                                <div class="mt-2">
+                                                                    <strong>Feedback:</strong>
+                                                                    <p>{{ submission.feedback|default('No feedback provided') }}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        {% if submission.is_correct %}
+                                                            <span class="badge bg-success">Correct</span>
+                                                        {% else %}
+                                                            <span class="badge bg-danger">Incorrect</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ submission.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i> No students have submitted answers for this assignment yet.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add event listeners to all collapse buttons to toggle icons
+        const collapseButtons = document.querySelectorAll('[data-bs-toggle="collapse"]');
+        
+        collapseButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const icon = this.querySelector('i');
+                
+                if (icon.classList.contains('fa-chevron-down')) {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            });
+            
+            // Also listen for the collapse events from Bootstrap
+            const targetId = button.getAttribute('data-bs-target');
+            const targetElement = document.querySelector(targetId);
+            
+            if (targetElement) {
+                targetElement.addEventListener('hidden.bs.collapse', function() {
+                    const buttonIcon = button.querySelector('i');
+                    buttonIcon.classList.remove('fa-chevron-up');
+                    buttonIcon.classList.add('fa-chevron-down');
+                });
+                
+                targetElement.addEventListener('shown.bs.collapse', function() {
+                    const buttonIcon = button.querySelector('i');
+                    buttonIcon.classList.remove('fa-chevron-down');
+                    buttonIcon.classList.add('fa-chevron-up');
+                });
+            }
+        });
+        
+        // Create image modal elements
+        const modal = document.createElement('div');
+        modal.className = 'image-modal';
+        
+        const modalImg = document.createElement('img');
+        modalImg.className = 'modal-content';
+        
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'modal-close';
+        closeBtn.innerHTML = '&times;';
+        
+        modal.appendChild(modalImg);
+        modal.appendChild(closeBtn);
+        document.body.appendChild(modal);
+        
+        // Add click event to all images
+        const images = document.querySelectorAll('.card-body img, .sql-code img, .question-content img, .answer-content img, .accordion-body img, .lead img');
+        
+        images.forEach(img => {
+            img.addEventListener('click', function() {
+                modal.style.display = 'block';
+                modalImg.src = this.src;
+            });
+        });
+        
+        // Close modal when clicking the X
+        closeBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+        
+        // Close modal when clicking outside the image
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.style.display === 'block') {
+                modal.style.display = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %} 

@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+
+{% block title %}Section Invitation - {{ section.name }} - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Section Invitation: {{ section.name }}</h1>
+    <a href="{{ url_for('teacher.view_section', section_id=section.id) }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Back to Section
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Invitation Link Management</h5>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    Send an invitation link to students to allow them to register and automatically join this section.
+                </p>
+                
+                {% if invitation_url %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i> An invitation link is currently active for this section.
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label">Current Invitation Link:</label>
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" value="{{ invitation_url }}" id="invitation-link" readonly>
+                        <button class="btn btn-outline-secondary" type="button" id="copy-link-btn">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                    <small class="text-muted">
+                        <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                        This link allows anyone to join this section. Do not share it publicly.
+                    </small>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <form method="POST" action="{{ url_for('teacher.section_invitation', section_id=section.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-sync me-2"></i> Generate New Link
+                        </button>
+                    </form>
+                    
+                    <form method="POST" action="{{ url_for('teacher.revoke_invitation', section_id=section.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to revoke this invitation link? Students will no longer be able to use it.');">
+                            <i class="fas fa-times-circle me-2"></i> Revoke Link
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i> No invitation link is currently active for this section.
+                </div>
+                
+                <form method="POST" action="{{ url_for('teacher.section_invitation', section_id=section.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus-circle me-2"></i> Generate Invitation Link
+                    </button>
+                </form>
+                {% endif %}
+                
+                <div class="mt-4">
+                    <h5>How it works:</h5>
+                    <ol>
+                        <li>Generate an invitation link for this section</li>
+                        <li>Share the link with your students via email or your preferred communication method</li>
+                        <li>When a new student clicks the link, they'll be directed to a registration page</li>
+                        <li>After registering, they'll automatically be added to this section</li>
+                        <li>Existing students who click the link will be added to this section after logging in</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const copyLinkBtn = document.getElementById('copy-link-btn');
+        const invitationLink = document.getElementById('invitation-link');
+        
+        if (copyLinkBtn && invitationLink) {
+            copyLinkBtn.addEventListener('click', function() {
+                invitationLink.select();
+                document.execCommand('copy');
+                
+                // Change button text temporarily to show success
+                const originalText = copyLinkBtn.innerHTML;
+                copyLinkBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                copyLinkBtn.classList.add('btn-success');
+                copyLinkBtn.classList.remove('btn-outline-secondary');
+                
+                setTimeout(function() {
+                    copyLinkBtn.innerHTML = originalText;
+                    copyLinkBtn.classList.remove('btn-success');
+                    copyLinkBtn.classList.add('btn-outline-secondary');
+                }, 2000);
+            });
+        }
+    });
+</script>
+{% endblock %} 

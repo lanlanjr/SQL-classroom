@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+
+{% block title %}Register for {{ section.name }} - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 offset-md-3">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Register for {{ section.name }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        You've been invited to join <strong>{{ section.name }}</strong>. Please register to get started.
+                    </div>
+                    
+                    {% if section.description %}
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Section Description</h5>
+                            <p class="card-text">{{ section.description }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <form method="POST" action="{{ url_for('auth.register_with_token', token=token) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
+                        <label for="first_name" class="form-label">First Name</label>
+                        <input type="text" class="form-control" id="first_name" name="first_name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="last_name" class="form-label">Last Name</label>
+                        <input type="text" class="form-control" id="last_name" name="last_name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="confirm_password" class="form-label">Confirm Password</label>
+                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <span class="text-muted">Role: <strong>Student</strong></span>
+                        <p class="small text-muted mt-1">You will be automatically enrolled in <strong>{{ section.name }}</strong> after registration.</p>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Register & Join Section</button>
+                    </div>
+                </form>
+                
+                <div class="mt-3 text-center">
+                    <p>Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a> instead.</p>
+                    <p class="small text-muted">If you already have an account, you can <a href="{{ url_for('auth.join_section', token=token) }}">click here</a> to join this section.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

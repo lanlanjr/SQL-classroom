@@ -1,0 +1,410 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ student.last_name ~ ' ' ~ student.first_name if student.last_name and student.first_name else student.username }} - Student Details{% endblock %}
+
+{% block styles %}
+<style>
+    .submission-item {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .submission-item:hover {
+        background-color: rgba(0, 0, 0, 0.03);
+    }
+    .sql-code {
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 10px;
+        max-height: 200px;
+        overflow-y: auto;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+    }
+    .expand-btn {
+        min-width: 40px;
+    }
+    .question-content, .answer-content {
+        width: 100%;
+    }
+    .submission-details td {
+        word-break: break-word;
+    }
+    pre code {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    .progress-container {
+        height: 10px;
+    }
+    .progress-bar-custom {
+        height: 100%;
+    }
+    .col-question {
+        width: 30%;
+    }
+    .col-points {
+        width: 10%;
+    }
+    .col-answer {
+        width: 40%;
+    }
+    .col-status {
+        width: 10%;
+    }
+    .col-date {
+        width: 10%;
+    }
+    /* Make images responsive */
+    .card-body img, 
+    .sql-code img,
+    .question-content img,
+    .answer-content img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0.5rem 0;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    
+    /* Add hover effect to indicate clickability */
+    .card-body img:hover, 
+    .sql-code img:hover,
+    .question-content img:hover,
+    .answer-content img:hover {
+        transform: scale(1.02);
+    }
+    
+    /* Image modal styles */
+    .image-modal {
+        display: none;
+        position: fixed;
+        z-index: 1050;
+        padding-top: 50px;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.9);
+        text-align: center;
+    }
+    
+    .modal-content {
+        margin: auto;
+        display: block;
+        max-width: 90%;
+        max-height: 90%;
+        object-fit: contain;
+        box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    }
+    
+    .modal-close {
+        position: absolute;
+        top: 15px;
+        right: 35px;
+        color: #f1f1f1;
+        font-size: 40px;
+        font-weight: bold;
+        cursor: pointer;
+        text-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Student: {{ student.last_name ~ ' ' ~ student.first_name if student.last_name and student.first_name else student.username }}</h1>
+    <div>
+        <a href="{{ url_for('teacher.students') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i> Back to Students
+        </a>
+    </div>
+</div>
+
+<!-- Student Information Card -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Student Information</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Name:</strong> {{ student.last_name ~ ' ' ~ student.first_name if student.last_name and student.first_name else 'Not provided' }}</p>
+                <p><strong>Username:</strong> {{ student.username }}</p>
+                <p><strong>Email:</strong> {{ student.email }}</p>
+                <p><strong>Account Created:</strong> {{ student.created_at.strftime('%Y-%m-%d') }}</p>
+            </div>
+            <div class="col-md-6">
+                <h6>Overall Statistics</h6>
+                <ul class="list-group">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Assignments Started
+                        {% set started_count = student_submissions.values()|selectattr('submitted_count', 'gt', 0)|list|length %}
+                        <span class="badge bg-primary rounded-pill">{{ started_count }}/{{ student_submissions|length }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Assignments Completed
+                        {% set completed_count = student_submissions.values()|selectattr('is_completed', 'eq', true)|list|length %}
+                        <span class="badge bg-success rounded-pill">{{ completed_count }}/{{ student_submissions|length }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Points
+                        {% set total_earned = student_submissions.values()|sum(attribute='earned_score') %}
+                        {% set total_possible = student_submissions.values()|sum(attribute='total_possible_score') %}
+                        <span class="badge bg-info rounded-pill">{{ total_earned }}/{{ total_possible }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Average Score
+                        {% if total_possible > 0 %}
+                            {% set average = (total_earned / total_possible * 100)|round|int %}
+                            <span class="badge bg-warning rounded-pill">{{ average }}%</span>
+                        {% else %}
+                            <span class="badge bg-secondary rounded-pill">N/A</span>
+                        {% endif %}
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assignments Progress -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Assignment Progress</h5>
+    </div>
+    <div class="card-body">
+        {% if student_submissions %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Assignment</th>
+                            <th>Due Date</th>
+                            <th>Progress</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for assignment_id, data in student_submissions.items() %}
+                            {% set assignment = data.assignment %}
+                            <tr class="submission-item" data-bs-toggle="collapse" data-bs-target="#collapse-{{ assignment_id }}">
+                                <td>{{ assignment.title }}</td>
+                                <td>
+                                    {% if assignment.due_date %}
+                                        {{ assignment.due_date.strftime('%Y-%m-%d %I:%M %p') }}
+                                        {% if assignment.due_date < now %}
+                                            <span class="badge bg-danger ms-2">Past Due</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">No due date</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2 progress-container">
+                                            <div class="progress-bar bg-primary progress-bar-custom progress-value" 
+                                                 role="progressbar" 
+                                                 data-progress="{{ data.progress|int }}"
+                                                 aria-valuenow="{{ data.progress|int }}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100"></div>
+                                        </div>
+                                        <span class="small">{{ data.submitted_count }}/{{ data.question_count }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">{{ data.earned_score }}/{{ data.total_possible_score }}</span>
+                                    {% if data.total_possible_score > 0 %}
+                                        {% set percentage = (data.earned_score / data.total_possible_score * 100)|round|int %}
+                                        <span class="ms-1 text-muted">({{ percentage }}%)</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if data.submitted_count == 0 %}
+                                        <span class="badge bg-secondary">Not Started</span>
+                                    {% elif data.is_completed %}
+                                        <span class="badge bg-success">Completed</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">In Progress</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr class="collapse" id="collapse-{{ assignment_id }}">
+                                <td colspan="5" class="p-0">
+                                    <div class="p-3 bg-light">
+                                        <h6>Submissions for {{ assignment.title }}</h6>
+                                        {% if data.submissions %}
+                                            <div class="table-responsive">
+                                                <table class="table table-sm">
+                                                    <thead>
+                                                        <tr>
+                                                            <th class="col-question">Question</th>
+                                                            <th class="col-points">Points</th>
+                                                            <th class="col-answer">Submitted Answer</th>
+                                                            <th class="col-status">Status</th>
+                                                            <th class="col-date">Submitted At</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for submission in data.submissions %}
+                                                            {% set question = submission.question %}
+                                                            <tr class="submission-details">
+                                                                <td>
+                                                                    <div class="d-flex align-items-center">
+                                                                        <button class="btn btn-sm btn-outline-secondary me-2 expand-btn" type="button" 
+                                                                                data-bs-toggle="collapse" data-bs-target="#question-{{ submission.id }}" 
+                                                                                aria-expanded="false">
+                                                                            <i class="fas fa-chevron-down"></i>
+                                                                        </button>
+                                                                        <span>{{ question.title }}</span>
+                                                                    </div>
+                                                                    <div class="collapse mt-2 question-content" id="question-{{ submission.id }}">
+                                                                        <div class="card card-body">
+                                                                            <h6>Question:</h6>
+                                                                            <p>{{ question.description|safe }}</p>
+                                                                            <h6>Correct Answer:</h6>
+                                                                            <div class="sql-code">
+                                                                                <pre><code class="sql">{{ question.correct_answer }}</code></pre>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td>
+                                                                    {% if submission.is_correct %}
+                                                                        <span class="badge bg-success">{{ submission.question_score }}</span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-danger">0/{{ submission.question_score }}</span>
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td>
+                                                                    <div class="d-flex align-items-center">
+                                                                        <button class="btn btn-sm btn-outline-secondary me-2 expand-btn" type="button" 
+                                                                                data-bs-toggle="collapse" data-bs-target="#answer-{{ submission.id }}" 
+                                                                                aria-expanded="false">
+                                                                            <i class="fas fa-chevron-down"></i>
+                                                                        </button>
+                                                                        <code class="small">{{ submission.submitted_answer|truncate(30) }}</code>
+                                                                    </div>
+                                                                    <div class="collapse mt-2 answer-content" id="answer-{{ submission.id }}">
+                                                                        <div class="card card-body">
+                                                                            <div class="sql-code">
+                                                                                <pre><code class="sql">{{ submission.submitted_answer }}</code></pre>
+                                                                            </div>
+                                                                            <div class="mt-2">
+                                                                                <strong>Feedback:</strong>
+                                                                                <p>{{ submission.feedback }}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td>
+                                                                    {% if submission.is_correct %}
+                                                                        <span class="badge bg-success">Correct</span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-danger">Incorrect</span>
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td>{{ submission.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                                            </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        {% else %}
+                                            <div class="alert alert-info">
+                                                No submissions for this assignment yet.
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i> This student hasn't been assigned any assignments.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add event listeners to all collapse buttons to toggle icons
+        const collapseButtons = document.querySelectorAll('[data-bs-toggle="collapse"]');
+        
+        collapseButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();  // Prevent click from bubbling up
+                const icon = this.querySelector('i');
+                
+                if (icon.classList.contains('fa-chevron-down')) {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            });
+        });
+
+        // Set progress bar widths
+        const progressBars = document.querySelectorAll('.progress-value');
+        progressBars.forEach(bar => {
+            const progress = bar.getAttribute('data-progress');
+            bar.style.width = progress + '%';
+        });
+        
+        // Create image modal elements
+        const modal = document.createElement('div');
+        modal.className = 'image-modal';
+        
+        const modalImg = document.createElement('img');
+        modalImg.className = 'modal-content';
+        
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'modal-close';
+        closeBtn.innerHTML = '&times;';
+        
+        modal.appendChild(modalImg);
+        modal.appendChild(closeBtn);
+        document.body.appendChild(modal);
+        
+        // Add click event to all images
+        const images = document.querySelectorAll('.card-body img, .sql-code img, .question-content img, .answer-content img');
+        
+        images.forEach(img => {
+            img.addEventListener('click', function() {
+                modal.style.display = 'block';
+                modalImg.src = this.src;
+            });
+        });
+        
+        // Close modal when clicking the X
+        closeBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+        
+        // Close modal when clicking outside the image
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.style.display === 'block') {
+                modal.style.display = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %} 

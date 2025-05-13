@@ -1,0 +1,55 @@
+{% extends "layout.html" %}
+
+{% block title %}SQL Classroom - Home{% endblock %}
+
+{% block content %}
+<div class="jumbotron p-5 mb-4 bg-light rounded-3">
+    <div class="container py-5">
+        <h1 class="display-4">Welcome to SQL Classroom</h1>
+        <p class="lead">A platform for teaching and learning SQL through interactive exercises.</p>
+        <hr class="my-4">
+        <p>SQL Classroom provides tools for teachers to create SQL exercises and for students to practice and get immediate feedback on their queries.</p>
+        
+        {% if not current_user.is_authenticated %}
+        <div class="d-flex gap-2 mt-4">
+            <a href="{{ url_for('auth.login') }}" class="btn btn-primary btn-lg">
+                <i class="fas fa-sign-in-alt me-2"></i> Log In
+            </a>
+            <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary btn-lg">
+                <i class="fas fa-user-plus me-2"></i> Register
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-chalkboard-teacher fa-4x text-primary mb-3"></i>
+                <h3 class="card-title">For Teachers</h3>
+                <p class="card-text">Create SQL exercises, define correct answers, and track student progress automatically.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-laptop-code fa-4x text-success mb-3"></i>
+                <h3 class="card-title">For Students</h3>
+                <p class="card-text">Learn SQL through hands-on exercises with instant feedback on your queries.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-database fa-4x text-info mb-3"></i>
+                <h3 class="card-title">Integrated Terminal</h3>
+                <p class="card-text">Practice SQL commands in a controlled environment directly in your browser.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

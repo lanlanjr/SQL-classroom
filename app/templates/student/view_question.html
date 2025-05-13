@@ -1,0 +1,1051 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ question.title }} - SQL Classroom{% endblock %}
+
+{% block styles %}
+<style>
+    .CodeMirror {
+        height: 200px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .result-table {
+        width: 100%;
+        overflow-x: auto;
+    }
+    .result-table th {
+        background-color: #f8f9fa;
+    }
+    .terminal-header {
+        background-color: #343a40;
+        color: white;
+        padding: 8px 15px;
+        border-radius: 5px 5px 0 0;
+    }
+    .terminal-container {
+        border: 1px solid #ddd;
+        border-radius: 0 0 5px 5px;
+        padding: 15px;
+        background-color: #f8f9fa;
+    }
+    .feedback-box {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 5px;
+    }
+    .feedback-correct {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+    }
+    .feedback-incorrect {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+    }
+    .countdown-timer {
+        background-color: #e9ecef;
+        border-radius: 4px;
+        padding: 10px;
+        margin-bottom: 15px;
+        text-align: center;
+    }
+    .countdown-value {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #495057;
+    }
+    .countdown-urgent {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    .terminal-locked {
+        position: relative;
+    }
+    .terminal-locked-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.05);
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0 0 5px 5px;
+    }
+    .lock-badge {
+        background-color: #28a745;
+        color: white;
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: bold;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+    .blurred-content {
+        filter: blur(3px);
+        pointer-events: none;
+        opacity: 0.8;
+        transition: filter 0.3s ease;
+    }
+    .submitted-query-locked {
+        position: relative;
+        cursor: not-allowed;
+    }
+    
+    /* Rich text content styles - enhanced for Quill */
+    .question-description {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .question-description h1, .question-description h2, .question-description h3, 
+    .question-description h4, .question-description h5, .question-description h6 {
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        line-height: 1.2;
+    }
+    .question-description h1 { font-size: 2rem; }
+    .question-description h2 { font-size: 1.75rem; }
+    .question-description h3 { font-size: 1.5rem; }
+    .question-description h4 { font-size: 1.25rem; }
+    .question-description h5 { font-size: 1.1rem; }
+    .question-description h6 { font-size: 1rem; }
+    
+    .question-description p {
+        margin-bottom: 1rem;
+        line-height: 1.5;
+    }
+    
+    /* Lists styling */
+    .question-description ul, .question-description ol {
+        padding-left: 2rem;
+        margin-bottom: 1rem;
+    }
+    .question-description li {
+        margin-bottom: 0.5rem;
+    }
+    /* Basic list type styling */
+    .question-description ul > li {
+        list-style-type: disc;
+    }
+    .question-description ul ul > li {
+        list-style-type: circle;
+    }
+    .question-description ul ul ul > li {
+        list-style-type: square;
+    }
+    .question-description ol > li {
+        list-style-type: decimal;
+    }
+    
+    /* Comprehensive fix for Quill lists */
+    /* First remove default styles that might interfere */
+    .question-description ul.ql-editor { 
+        list-style-type: none; 
+        padding: 0; 
+        margin: 0;
+    }
+    
+    /* Explicit styling for different list types */
+    .question-description li.ql-list-bullet {
+        position: relative;
+        list-style-type: disc !important;
+        padding-left: 0.5em;
+    }
+    
+    .question-description li.ql-indent-1.ql-list-bullet {
+        list-style-type: circle !important;
+    }
+    
+    .question-description li.ql-indent-2.ql-list-bullet {
+        list-style-type: square !important;
+    }
+    
+    /* Fix for ordered lists */
+    .question-description li.ql-list-ordered {
+        list-style-type: decimal !important;
+    }
+    
+    /* Direct HTML structure from Quill - this is the key fix */
+    .question-description ul {
+        list-style-type: disc !important;
+    }
+    .question-description ul li {
+        list-style-type: disc !important;
+    }
+    /* Target the style attribute that Quill sometimes adds */
+    .question-description li[data-list="bullet"],
+    .question-description li[data-list="bullet"] > * {
+        list-style-type: disc !important;
+    }
+    
+    /* Handle Quill-specific indentation */
+    .question-description .ql-indent-1 { padding-left: 3em; }
+    .question-description .ql-indent-2 { padding-left: 6em; }
+    .question-description .ql-indent-3 { padding-left: 9em; }
+    
+    /* Blockquote styling */
+    .question-description blockquote {
+        padding: 0.5rem 1rem;
+        margin: 0 0 1rem;
+        background-color: #f8f9fa;
+        border-left: 0.25rem solid #dee2e6;
+        color: #6c757d;
+        font-style: italic;
+    }
+    
+    /* Code styling */
+    .question-description pre {
+        display: block;
+        padding: 1rem;
+        margin: 1rem 0;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: #212529;
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        overflow-x: auto;
+    }
+    .question-description code {
+        font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 0.875em;
+        color: #212529;
+        background-color: #f8f9fa;
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.25rem;
+    }
+    
+    /* Alignment classes */
+    .question-description .ql-align-center {
+        text-align: center;
+    }
+    .question-description .ql-align-right {
+        text-align: right;
+    }
+    .question-description .ql-align-justify {
+        text-align: justify;
+    }
+    
+    /* Image styling */
+    .question-description img,
+    .card-body img,
+    .sql-code img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 1rem auto;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    
+    /* Add hover effect to indicate clickability */
+    .question-description img:hover,
+    .card-body img:hover,
+    .sql-code img:hover {
+        transform: scale(1.02);
+    }
+    
+    /* Image modal styles */
+    .image-modal {
+        display: none;
+        position: fixed;
+        z-index: 1050;
+        padding-top: 50px;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.9);
+        text-align: center;
+    }
+    
+    .modal-content {
+        margin: auto;
+        display: block;
+        max-width: 90%;
+        max-height: 90%;
+        object-fit: contain;
+        box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    }
+    
+    .modal-close {
+        position: absolute;
+        top: 15px;
+        right: 35px;
+        color: #f1f1f1;
+        font-size: 40px;
+        font-weight: bold;
+        cursor: pointer;
+        text-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    
+    /* Color and background styles */
+    .question-description span[style*="color"] {
+        /* color: inherit !important; - removed */
+    }
+    .question-description span[style*="background-color"] {
+        /* background-color: inherit !important; - removed */
+    }
+    
+    /* Enhanced color handling for both inline styles and class-based styles */
+    /* Text Colors */
+    .question-description .ql-color-white, 
+    .question-description span[style*="color: white"],
+    .question-description span[style*="color:#ffffff"],
+    .question-description span[style*="color: #ffffff"] { 
+        color: white !important; 
+    }
+    
+    .question-description .ql-color-red, 
+    .question-description span[style*="color: red"],
+    .question-description span[style*="color:#e60000"],
+    .question-description span[style*="color: #e60000"] { 
+        color: #e60000 !important; 
+    }
+    
+    .question-description .ql-color-orange, 
+    .question-description span[style*="color: orange"],
+    .question-description span[style*="color:#ff9900"],
+    .question-description span[style*="color: #ff9900"] { 
+        color: #ff9900 !important; 
+    }
+    
+    .question-description .ql-color-yellow, 
+    .question-description span[style*="color: yellow"],
+    .question-description span[style*="color:#ffff00"],
+    .question-description span[style*="color: #ffff00"] { 
+        color: #ffff00 !important; 
+    }
+    
+    .question-description .ql-color-green, 
+    .question-description span[style*="color: green"],
+    .question-description span[style*="color:#008a00"],
+    .question-description span[style*="color: #008a00"] { 
+        color: #008a00 !important; 
+    }
+    
+    .question-description .ql-color-blue, 
+    .question-description span[style*="color: blue"],
+    .question-description span[style*="color:#0066cc"],
+    .question-description span[style*="color: #0066cc"] { 
+        color: #0066cc !important; 
+    }
+    
+    .question-description .ql-color-purple, 
+    .question-description span[style*="color: purple"],
+    .question-description span[style*="color:#9933ff"],
+    .question-description span[style*="color: #9933ff"] { 
+        color: #9933ff !important; 
+    }
+    
+    .question-description .ql-color-black, 
+    .question-description span[style*="color: black"],
+    .question-description span[style*="color:#000000"],
+    .question-description span[style*="color: #000000"] { 
+        color: #000000 !important; 
+    }
+    
+    /* Background Colors */
+    .question-description .ql-bg-white, 
+    .question-description span[style*="background-color: white"],
+    .question-description span[style*="background-color:#ffffff"],
+    .question-description span[style*="background-color: #ffffff"] { 
+        background-color: white !important; 
+    }
+    
+    .question-description .ql-bg-red, 
+    .question-description span[style*="background-color: red"],
+    .question-description span[style*="background-color:#e60000"],
+    .question-description span[style*="background-color: #e60000"] { 
+        background-color: #e60000 !important; 
+    }
+    
+    .question-description .ql-bg-orange, 
+    .question-description span[style*="background-color: orange"],
+    .question-description span[style*="background-color:#ff9900"],
+    .question-description span[style*="background-color: #ff9900"] { 
+        background-color: #ff9900 !important; 
+    }
+    
+    .question-description .ql-bg-yellow, 
+    .question-description span[style*="background-color: yellow"],
+    .question-description span[style*="background-color:#ffff00"],
+    .question-description span[style*="background-color: #ffff00"] { 
+        background-color: #ffff00 !important; 
+    }
+    
+    .question-description .ql-bg-green, 
+    .question-description span[style*="background-color: green"],
+    .question-description span[style*="background-color:#008a00"],
+    .question-description span[style*="background-color: #008a00"] { 
+        background-color: #008a00 !important; 
+    }
+    
+    .question-description .ql-bg-blue, 
+    .question-description span[style*="background-color: blue"],
+    .question-description span[style*="background-color:#0066cc"],
+    .question-description span[style*="background-color: #0066cc"] { 
+        background-color: #0066cc !important; 
+    }
+    
+    .question-description .ql-bg-purple, 
+    .question-description span[style*="background-color: purple"],
+    .question-description span[style*="background-color:#9933ff"],
+    .question-description span[style*="background-color: #9933ff"] { 
+        background-color: #9933ff !important; 
+    }
+    
+    /* Additional formatting */
+    .question-description strong { font-weight: bold; }
+    .question-description em { font-style: italic; }
+    .question-description u { text-decoration: underline; }
+    .question-description s { text-decoration: line-through; }
+    
+    /* Quill specific classes */
+    .question-description .ql-font-serif {
+        font-family: Georgia, Times New Roman, serif;
+    }
+    .question-description .ql-font-monospace {
+        font-family: Monaco, Courier New, monospace;
+    }
+    .question-description .ql-size-small {
+        font-size: 0.75em;
+    }
+    .question-description .ql-size-large {
+        font-size: 1.5em;
+    }
+    .question-description .ql-size-huge {
+        font-size: 2.5em;
+    }
+    
+    {% if question.disable_copy_paste %}
+    /* Prevent text selection on the entire page */
+    body {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+    /* Allow selection only where explicitly needed (like input fields) */
+    input, textarea, .CodeMirror {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+    }
+    {% endif %}
+    
+    /* Extra fixes for Quill bullet lists */
+    /* Explicitly target all ul lists to override ordered styling */
+    .question-description ul li {
+        list-style: disc !important;
+    }
+    .question-description ul li::marker {
+        content: "•" !important;
+        font-size: 1.2em;
+    }
+    /* More specific selectors to handle .ql-editor content */
+    .question-description .ql-editor ul > li {
+        padding-left: 1.5em !important;
+        list-style: disc outside !important;
+    }
+    .question-description .ql-editor ul > li::before {
+        content: "•" !important;
+        display: inline-block !important;
+        margin-left: -1.5em !important;
+        margin-right: 0.3em !important;
+        text-align: right !important;
+        white-space: nowrap !important;
+        width: 1.2em !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ question.title }}</h1>
+    <a href="{{ url_for('student.view_assignment', assignment_id=assignment_id) }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Back to Assignment
+    </a>
+</div>
+
+{% if question.disable_copy_paste %}
+<!-- Flash notification removed as requested -->
+{% endif %}
+
+<div class="row">
+    <!-- Question Details -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Question</h5>
+            </div>
+            <div class="card-body">
+                <!-- Countdown Timer -->
+                {% if not is_past_due %}
+                <div id="countdown-timer" class="countdown-timer">
+                    <div class="mb-1">
+                        <i class="far fa-clock me-1"></i> Time Remaining:
+                    </div>
+                    <div id="countdown-value" class="countdown-value">
+                        Loading...
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="badge bg-secondary">Difficulty: 
+                        {% for i in range(1, 6) %}
+                            {% if i <= question.difficulty %}
+                                <i class="fas fa-star text-warning"></i>
+                            {% else %}
+                                <i class="far fa-star text-secondary"></i>
+                            {% endif %}
+                        {% endfor %}
+                    </span>
+                    {% if submission and submission.is_correct %}
+                    <span class="badge bg-success">
+                        <i class="fas fa-lock me-1"></i> Solved
+                    </span>
+                    {% endif %}
+                </div>
+                
+                <div class="question-description mb-4">
+                    {{ question.description|safe }}
+                </div>
+                
+                <!-- Show submission status if any -->
+                {% if submission %}
+                    <div class="submission-status mt-4">
+                        <h6>Your Submission:</h6>
+                        <div class="feedback-box {% if submission.is_correct %}feedback-correct{% else %}feedback-incorrect{% endif %}">
+                            <h5 class="mb-2">
+                                {% if submission.is_correct %}
+                                    <i class="fas fa-check-circle me-2"></i> Correct!
+                                {% else %}
+                                    <i class="fas fa-times-circle me-2"></i> Incorrect
+                                {% endif %}
+                            </h5>
+                            <p class="mb-0">{{ submission.feedback }}</p>
+                        </div>
+                        <div class="submitted-query mt-2 {% if submission.is_correct %}submitted-query-locked{% endif %}">
+                            <label><small>Your submitted query:</small></label>
+                            <pre class="border rounded p-2 bg-light {% if submission.is_correct %}blurred-content{% endif %}"><code>{{ submission.submitted_answer }}</code></pre>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- SQL Terminal -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="terminal-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">SQL Terminal</h5>
+                <div>
+                    <button id="reset-terminal" class="btn btn-sm btn-outline-light" 
+                            {% if is_past_due or (submission and submission.is_correct) %}disabled{% endif %}>
+                        <i class="fas fa-redo-alt me-1"></i> Reset
+                    </button>
+                </div>
+            </div>
+            <div class="terminal-container {% if submission and submission.is_correct %}terminal-locked{% endif %}">
+                <!-- Add Tips Section -->
+                <div class="alert alert-info mb-3">
+                    <h6 class="mb-2"><i class="fas fa-lightbulb me-2"></i>Available Database Commands:</h6>
+                    {% if question.db_type == 'mysql' %}
+                    <ul class="mb-0">
+                        <li><code>SHOW TABLES;</code> - List all tables in the database</li>
+                        <li><code>DESCRIBE table_name;</code> or <code>DESC table_name;</code> - Show table structure</li>
+                        <li><code>SHOW COLUMNS FROM table_name;</code> - Alternative way to show table structure</li>
+                        <li><code>SHOW CREATE TABLE table_name;</code> - Show table creation SQL</li>
+                        <li><code>SELECT * FROM table_name LIMIT 5;</code> - Preview table data</li>
+                    </ul>
+                    {% else %}
+                    <ul class="mb-0">
+                        <li><code>SELECT name FROM sqlite_master WHERE type='table';</code> - List all tables</li>
+                        <li><code>SELECT sql FROM sqlite_master WHERE type='table' AND name='table_name';</code> - Show table creation SQL</li>
+                        <li><code>PRAGMA table_info(table_name);</code> - Show table structure</li>
+                        <li><code>SELECT * FROM table_name LIMIT 5;</code> - Preview table data</li>
+                    </ul>
+                    {% endif %}
+                </div>
+                
+                {% if is_past_due and not submission %}
+                <div class="alert alert-danger mb-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i> This assignment is past its due date. You cannot submit a solution.
+                </div>
+                {% endif %}
+                
+                {% if submission and submission.is_correct %}
+                <div class="terminal-locked-overlay">
+                    <div class="lock-badge">
+                        <i class="fas fa-lock me-1"></i> Question Solved and Locked
+                    </div>
+                </div>
+                {% endif %}
+                
+                <form id="sql-form">
+                    <input type="hidden" id="question_id" value="{{ question.id }}">
+                    <input type="hidden" id="assignment_id" value="{{ assignment_id }}">
+                    
+                    <div class="mb-3">
+                        <label for="sql-query" class="form-label">Enter your SQL query:</label>
+                        <textarea id="sql-query" class="form-control {% if submission and submission.is_correct %}blurred-content{% endif %}"></textarea>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="button" id="execute-btn" class="btn btn-primary" 
+                                {% if is_past_due or (submission and submission.is_correct) %}disabled{% endif %}>
+                            <i class="fas fa-play me-1"></i> Execute
+                        </button>
+                        <button type="button" id="submit-btn" class="btn btn-success" 
+                                {% if is_past_due or (submission and submission.is_correct) %}disabled{% endif %}>
+                            <i class="fas fa-paper-plane me-1"></i> Submit Answer
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="result-container" class="mt-4 {% if submission and submission.is_correct %}blurred-content{% endif %}" style="display: none;">
+                    <h6>Query Result:</h6>
+                    <div id="error-message" class="alert alert-danger" style="display: none;"></div>
+                    <div id="table-result" class="result-table mt-2" style="display: none;">
+                        <table class="table table-sm table-bordered">
+                            <thead id="result-head"></thead>
+                            <tbody id="result-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden inputs for JavaScript -->
+{% if submission %}
+<input type="hidden" id="previous-submission" value="{{ submission.submitted_answer|e }}">
+{% endif %}
+<!-- Hidden input for due date calculation -->
+{% if assignment.due_date %}
+<input type="hidden" id="assignment-due-date" value="{{ assignment.due_date.strftime('%Y-%m-%d %H:%M:%S') }}">
+{% endif %}
+<!-- Hidden input to track if the submission is correct -->
+{% if submission %}
+<input type="hidden" id="submission-is-correct" value="{{ 'true' if submission.is_correct else 'false' }}">
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<!-- Include our confirmation dialogs JS -->
+<script src="{{ url_for('static', filename='js/confirmations.js') }}"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get CSRF token
+        const csrfToken = "{{ csrf_token() }}";
+        
+        // Process any Quill-specific syntax in the question description
+        const questionDescription = document.querySelector('.question-description');
+        if (questionDescription) {
+            // ... existing Quill processing code ...
+        }
+        
+        // Create image modal elements
+        const modal = document.createElement('div');
+        modal.className = 'image-modal';
+        
+        const modalImg = document.createElement('img');
+        modalImg.className = 'modal-content';
+        
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'modal-close';
+        closeBtn.innerHTML = '&times;';
+        
+        modal.appendChild(modalImg);
+        modal.appendChild(closeBtn);
+        document.body.appendChild(modal);
+        
+        // Add click event to all images
+        const images = document.querySelectorAll('.question-description img, .card-body img, .sql-code img');
+        
+        images.forEach(img => {
+            img.addEventListener('click', function() {
+                modal.style.display = 'block';
+                modalImg.src = this.src;
+            });
+        });
+        
+        // Close modal when clicking the X
+        closeBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+        
+        // Close modal when clicking outside the image
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.style.display === 'block') {
+                modal.style.display = 'none';
+            }
+        });
+        
+        {% if question.disable_copy_paste %}
+        // ... existing copy-paste prevention code ...
+        {% endif %}
+        
+        // Initialize CodeMirror for SQL editor
+        var isReadOnly = {% if is_past_due or (submission and submission.is_correct) %}true{% else %}false{% endif %};
+        var sqlEditor = CodeMirror.fromTextArea(document.getElementById('sql-query'), {
+            mode: 'text/x-sql',
+            theme: 'dracula',
+            lineNumbers: true,
+            indentWithTabs: true,
+            smartIndent: true,
+            lineWrapping: true,
+            matchBrackets: true,
+            autoCloseBrackets: true,
+            readOnly: isReadOnly
+        });
+        
+        // Execute Query Button
+        document.getElementById('execute-btn').addEventListener('click', function() {
+            executeQuery(false);
+        });
+        
+        // Submit Answer Button
+        document.getElementById('submit-btn').addEventListener('click', function() {
+            confirmSubmitAnswer().then((result) => {
+                if (result.isConfirmed) {
+                    executeQuery(true);
+                }
+            });
+        });
+        
+        // Reset Terminal Button
+        document.getElementById('reset-terminal').addEventListener('click', function() {
+            confirmResetTerminal().then((result) => {
+                if (result.isConfirmed) {
+                    sqlEditor.setValue('');
+                    hideResults();
+                }
+            });
+        });
+        
+        // Check if submission is correct
+        var submissionIsCorrect = document.getElementById('submission-is-correct');
+        if (submissionIsCorrect && submissionIsCorrect.value === 'true') {
+            // Apply blur to CodeMirror
+            var cmElement = sqlEditor.getWrapperElement();
+            cmElement.classList.add('blurred-content');
+            
+            // Only add click handlers to the CodeMirror element
+            cmElement.addEventListener('click', function() {
+                this.classList.remove('blurred-content');
+                setTimeout(() => {
+                    this.classList.add('blurred-content');
+                }, 3000);
+            });
+            
+            // Add a notice to the form explaining why it's locked
+            const form = document.getElementById('sql-form');
+            if (form) {
+                const notice = document.createElement('div');
+                notice.className = 'alert alert-success mt-3';
+                notice.innerHTML = '<i class="fas fa-info-circle me-2"></i> This question is locked because you\'ve already submitted a correct answer.';
+                form.appendChild(notice);
+            }
+        }
+        
+        // Countdown Timer
+        const dueDateInput = document.getElementById('assignment-due-date');
+        const countdownContainer = document.getElementById('countdown-timer');
+        const countdownElem = document.getElementById('countdown-value');
+        
+        if (dueDateInput && countdownContainer && countdownElem) {
+            const dueDate = new Date(dueDateInput.value);
+            
+            // Update every second
+            updateCountdown();
+            const countdownInterval = setInterval(updateCountdown, 1000);
+            
+            function updateCountdown() {
+                const now = new Date();
+                const timeDiff = dueDate - now;
+                
+                // If past due, stop countdown
+                if (timeDiff <= 0) {
+                    clearInterval(countdownInterval);
+                    countdownElem.textContent = 'Assignment is past due';
+                    countdownContainer.classList.add('countdown-urgent');
+                    return;
+                }
+                
+                // Calculate time components
+                const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+                
+                // Format countdown text
+                let countdownText = '';
+                
+                if (days > 0) {
+                    countdownText += `${days} day${days !== 1 ? 's' : ''} `;
+                }
+                
+                countdownText += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                // Display the countdown
+                countdownElem.textContent = countdownText;
+                
+                // Add urgent class if less than 1 hour remains
+                if (timeDiff < 1000 * 60 * 60) {
+                    countdownContainer.classList.add('countdown-urgent');
+                } else {
+                    countdownContainer.classList.remove('countdown-urgent');
+                }
+            }
+        }
+        
+        function executeQuery(isSubmission) {
+            const query = sqlEditor.getValue();
+            const questionId = document.getElementById('question_id').value;
+            const assignmentId = document.getElementById('assignment_id').value;
+            
+            if (!query.trim()) {
+                alert('Please enter a SQL query.');
+                return;
+            }
+            
+            // Disable buttons during execution
+            document.getElementById('execute-btn').disabled = true;
+            document.getElementById('submit-btn').disabled = true;
+            
+            // Show loading indicator
+            if (!isSubmission) {
+                const resultContainer = document.getElementById('result-container');
+                resultContainer.style.display = 'block';
+                resultContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Executing query...</p></div>';
+            }
+            
+            // Prepare the request data
+            const requestData = {
+                query: query,
+                question_id: questionId,
+                assignment_id: assignmentId
+            };
+            
+            // Determine the endpoint based on whether this is a submission or just execution
+            const endpoint = isSubmission ? '/student/api/submit-answer' : '/student/api/execute-query';
+            
+            // Send the request to the server
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(requestData),
+                cache: 'no-store'  // Prevent caching of results
+            })
+            .then(response => {
+                if (!response.ok) {
+                    if (response.status === 400) {
+                        // Handle bad request as invalid query
+                        return response.json().then(data => {
+                            throw new Error(data.error || 'Invalid query');
+                        });
+                    }
+                    throw new Error(`Server error: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    showError(data.error);
+                } else if (isSubmission) {
+                    // Handle submission response
+                    handleSubmissionResult(data);
+                } else {
+                    // Handle execution response - always create a fresh result
+                    createResultContainer();
+                    showResults(data);
+                }
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+                // Display a user-friendly error message
+                if (error.message.startsWith('Server error:')) {
+                    showError('Server error occurred. Please try again later.');
+                } else {
+                    showError(error.message);
+                }
+            })
+            .finally(() => {
+                // Re-enable buttons
+                document.getElementById('execute-btn').disabled = false;
+                document.getElementById('submit-btn').disabled = false;
+            });
+        }
+        
+        function createResultContainer() {
+            const resultContainer = document.getElementById('result-container');
+            resultContainer.innerHTML = `
+                <h6>Query Result:</h6>
+                <div id="error-message" class="alert alert-danger" style="display: none;"></div>
+                <div id="table-result" class="result-table mt-2" style="display: none;">
+                    <table class="table table-sm table-bordered">
+                        <thead id="result-head"></thead>
+                        <tbody id="result-body"></tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        function showResults(data) {
+            const resultContainer = document.getElementById('result-container');
+            const errorMessage = document.getElementById('error-message');
+            const tableResult = document.getElementById('table-result');
+            const resultHead = document.getElementById('result-head');
+            const resultBody = document.getElementById('result-body');
+            
+            // Show the result container
+            resultContainer.style.display = 'block';
+            errorMessage.style.display = 'none';
+            tableResult.style.display = 'block';
+            
+            // Check if data is valid
+            if (!data) {
+                showError('Response data is null or undefined');
+                return;
+            }
+            
+            // Default values if properties are missing
+            const columns = data.columns || [];
+            const rowData = data.data || [];
+            
+            // Clear previous results
+            resultHead.innerHTML = '';
+            resultBody.innerHTML = '';
+            
+            // Create header row if we have columns
+            if (columns.length > 0) {
+                const headerRow = document.createElement('tr');
+                columns.forEach(column => {
+                    const th = document.createElement('th');
+                    th.textContent = column;
+                    headerRow.appendChild(th);
+                });
+                resultHead.appendChild(headerRow);
+            } else {
+                // Still create a basic header row for empty results
+                const headerRow = document.createElement('tr');
+                const th = document.createElement('th');
+                th.textContent = 'Result';
+                headerRow.appendChild(th);
+                resultHead.appendChild(headerRow);
+            }
+            
+            // Create data rows
+            if (rowData.length > 0) {
+                rowData.forEach(row => {
+                    const tr = document.createElement('tr');
+                    // Handle both array rows and object rows
+                    if (Array.isArray(row)) {
+                        row.forEach(cell => {
+                            const td = document.createElement('td');
+                            td.textContent = cell === null ? 'NULL' : cell;
+                            tr.appendChild(td);
+                        });
+                    } else if (typeof row === 'object' && row !== null) {
+                        // Handle object rows
+                        columns.forEach(column => {
+                            const td = document.createElement('td');
+                            td.textContent = row[column] === null ? 'NULL' : row[column];
+                            tr.appendChild(td);
+                        });
+                    } else {
+                        // Single value
+                        const td = document.createElement('td');
+                        td.textContent = row === null ? 'NULL' : row;
+                        tr.appendChild(td);
+                    }
+                    resultBody.appendChild(tr);
+                });
+            } else {
+                // No rows
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = columns.length || 1;
+                td.textContent = 'Query executed successfully, but returned no data.';
+                td.className = 'text-center text-muted';
+                tr.appendChild(td);
+                resultBody.appendChild(tr);
+            }
+        }
+        
+        function showError(message) {
+            const resultContainer = document.getElementById('result-container');
+            const errorMessage = document.getElementById('error-message');
+            const tableResult = document.getElementById('table-result');
+            
+            // Create the error message element if it doesn't exist
+            if (!errorMessage) {
+                createResultContainer();
+            }
+            
+            resultContainer.style.display = 'block';
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-message').textContent = message;
+            document.getElementById('table-result').style.display = 'none';
+        }
+        
+        function hideResults() {
+            const resultContainer = document.getElementById('result-container');
+            resultContainer.style.display = 'none';
+        }
+        
+        function handleSubmissionResult(data) {
+            if (data.success && data.is_correct) {
+                // Show success alert first, then reload page
+                showCorrectAnswerAlert(data.feedback).then(() => {
+                    // Force a full page reload to get fresh data
+                    window.location.href = window.location.href;
+                });
+            } else {
+                // Show error alert for wrong answers
+                showWrongAnswerAlert(data.feedback || data.error || 'Your answer is incorrect. Please try again.');
+            }
+        }
+        
+        // Function to show correct answer alert
+        async function showCorrectAnswerAlert(feedback) {
+            return Swal.fire({
+                icon: 'success',
+                title: 'Correct!',
+                text: feedback,
+                confirmButtonText: 'Continue'
+            });
+        }
+        
+        // Function to show wrong answer alert
+        async function showWrongAnswerAlert(feedback) {
+            return Swal.fire({
+                icon: 'error',
+                title: 'Incorrect',
+                text: feedback,
+                confirmButtonText: 'Try Again'
+            });
+        }
+    });
+</script>
+{% endblock %} 

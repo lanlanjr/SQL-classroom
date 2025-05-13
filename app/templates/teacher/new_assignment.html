@@ -1,0 +1,288 @@
+{% extends "layout.html" %}
+
+{% block title %}New Assignment - SQL Classroom{% endblock %}
+
+{% block styles %}
+<style>
+    .question-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .selected-questions-list {
+        min-height: 200px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+    }
+    .question-item {
+        cursor: pointer;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 5px;
+    }
+    .question-item:hover {
+        background-color: #f8f9fa;
+    }
+    .selected-question {
+        background-color: #e9ecef;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .question-item .badge, .selected-question .badge {
+        font-size: 0.7em;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Create New Assignment</h1>
+    <a href="{{ url_for('teacher.assignments') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Back to Assignments
+    </a>
+</div>
+
+<div class="card shadow">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('teacher.new_assignment') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-3">
+                <label for="title" class="form-label">Assignment Title</label>
+                <input type="text" class="form-control" id="title" name="title" required>
+                <div class="form-text">A short, descriptive title for the assignment.</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Assignment Description</label>
+                <textarea class="form-control" id="description" name="description" rows="4"></textarea>
+                <div class="form-text">Instructions or additional information for students.</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="due_date" class="form-label">Due Date (Optional)</label>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <input type="date" class="form-control" id="due_date" name="due_date" min="{{ today_date }}">
+                    </div>
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <input type="time" class="form-control" id="due_time" name="due_time">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="my-4">
+            
+            <h4>Select Questions</h4>
+            
+            {% if questions %}
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Available Questions</h5>
+                        <div class="question-list">
+                            {% for question in questions %}
+                                <div class="question-item" data-question-id="{{ question.id }}" data-title="{{ question.title }}">
+                                    <div class="card-title">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <h5 class="mb-1">{{ question.title }}</h5>
+                                            <small>
+                                                <span class="badge bg-secondary">Difficulty: 
+                                                    {% for i in range(1, 6) %}
+                                                        {% if i <= question.difficulty %}
+                                                            <i class="fas fa-star text-warning"></i>
+                                                        {% else %}
+                                                            <i class="far fa-star"></i>
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                </span>
+                                                <span class="badge {% if question.db_type == 'mysql' %}bg-info{% else %}bg-success{% endif %}">
+                                                    {{ question.db_type }}
+                                                </span>
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h5>Selected Questions <small class="text-muted">(Drag to reorder)</small></h5>
+                        <div class="selected-questions-list" id="selected-questions">
+                            <!-- Selected questions will appear here -->
+                        </div>
+                        <div class="text-muted small mt-2">
+                            <i class="fas fa-info-circle"></i> Click on a question to add it to the assignment.
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Hidden input to store selected question IDs -->
+                <div id="question-ids-container">
+                    <!-- Question ID inputs will be added here -->
+                </div>
+            {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i> You haven't created any questions yet. 
+                    <a href="{{ url_for('teacher.new_question') }}">Create a question</a> before making an assignment.
+                </div>
+            {% endif %}
+            
+            <div class="d-grid mt-4">
+                <button type="submit" class="btn btn-primary" {% if not questions %}disabled{% endif %}>
+                    Create Assignment
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Time and date logic for disabling past times
+        const dateInput = document.getElementById('due_date');
+        const timeInput = document.getElementById('due_time');
+        
+        // Set initial minimum time if date is today
+        function updateMinTime() {
+            if (dateInput.value === '{{ today_date }}') {
+                const now = new Date();
+                let hours = now.getHours();
+                let minutes = now.getMinutes();
+                // Round up to the nearest 5 minutes for better UX
+                minutes = Math.ceil(minutes / 5) * 5;
+                if (minutes >= 60) {
+                    minutes = 0;
+                    hours += 1;
+                }
+                
+                // Format time properly with leading zeros
+                const minTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                timeInput.min = minTime;
+                
+                // If the currently selected time is now before the minimum, update it
+                if (timeInput.value && timeInput.value < minTime) {
+                    timeInput.value = minTime;
+                }
+            } else {
+                // Reset minimum time restriction if the date is in the future
+                timeInput.min = '';
+            }
+        }
+        
+        // Update minimum time when date changes
+        dateInput.addEventListener('change', updateMinTime);
+        
+        // Initial calls
+        updateMinTime();
+        
+        // Get elements for question selection
+        const questionItems = document.querySelectorAll('.question-item');
+        const selectedQuestionsList = document.getElementById('selected-questions');
+        const questionIdsContainer = document.getElementById('question-ids-container');
+        
+        // Initialize selected questions array
+        const selectedQuestions = [];
+        
+        // Make selected questions sortable
+        new Sortable(selectedQuestionsList, {
+            animation: 150,
+            ghostClass: 'bg-light',
+            onSort: updateQuestionIds
+        });
+        
+        // Add click event to question items
+        questionItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const questionId = this.getAttribute('data-question-id');
+                const questionTitle = this.getAttribute('data-title');
+                
+                // Check if already selected
+                if (!selectedQuestions.includes(questionId)) {
+                    selectedQuestions.push(questionId);
+                    
+                    // Create selected question element
+                    const selectedQuestionDiv = document.createElement('div');
+                    selectedQuestionDiv.className = 'selected-question';
+                    selectedQuestionDiv.setAttribute('data-question-id', questionId);
+                    selectedQuestionDiv.innerHTML = `
+                        <span>${questionTitle}</span>
+                        <div class="d-flex align-items-center">
+                            <div class="me-2">
+                                <input type="number" class="form-control form-control-sm question-score" 
+                                       style="width: 70px;" min="1" value="10" placeholder="Points">
+                            </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-question">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        </div>
+                    `;
+                    
+                    // Add to selected list
+                    selectedQuestionsList.appendChild(selectedQuestionDiv);
+                    
+                    // Add remove event
+                    const removeButton = selectedQuestionDiv.querySelector('.remove-question');
+                    removeButton.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const questionId = this.closest('.selected-question').getAttribute('data-question-id');
+                        const index = selectedQuestions.indexOf(questionId);
+                        if (index > -1) {
+                            selectedQuestions.splice(index, 1);
+                        }
+                        this.closest('.selected-question').remove();
+                        updateQuestionIds();
+                    });
+                    
+                    updateQuestionIds();
+                }
+            });
+        });
+        
+        // Update question IDs in form
+        function updateQuestionIds() {
+            // Clear container
+            questionIdsContainer.innerHTML = '';
+            
+            // Get current order from DOM
+            const selectedQuestionElements = selectedQuestionsList.querySelectorAll('.selected-question');
+            
+            // Create hidden inputs for each selected question
+            selectedQuestionElements.forEach((element, index) => {
+                const questionId = element.getAttribute('data-question-id');
+                const scoreInput = element.querySelector('.question-score');
+                const score = scoreInput ? scoreInput.value : 10;
+                
+                // Create hidden input for question ID
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'question_ids';
+                input.value = questionId;
+                questionIdsContainer.appendChild(input);
+                
+                // Create hidden input for question score
+                const scoreInputHidden = document.createElement('input');
+                scoreInputHidden.type = 'hidden';
+                scoreInputHidden.name = 'question_scores';
+                scoreInputHidden.value = score;
+                questionIdsContainer.appendChild(scoreInputHidden);
+            });
+        }
+        
+        // Update question IDs when scores change
+        selectedQuestionsList.addEventListener('change', function(e) {
+            if (e.target && e.target.classList.contains('question-score')) {
+                updateQuestionIds();
+            }
+        });
+    });
+</script>
+{% endblock %} 

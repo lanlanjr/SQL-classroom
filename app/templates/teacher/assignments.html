@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+
+{% block title %}Assignments - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Assignments</h1>
+    <a href="{{ url_for('teacher.new_assignment') }}" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i> New Assignment
+    </a>
+</div>
+
+{% if assignments %}
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Description</th>
+                            <th>Questions</th>
+                            <th>Created Date</th>
+                            <th>Due Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for assignment in assignments %}
+                            <tr>
+                                <td>{{ assignment.title }}</td>
+                                <td>
+                                    {% if assignment.description %}
+                                        {{ assignment.description|truncate(50) }}
+                                    {% else %}
+                                        <span class="text-muted">No description</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ assignment.questions|length }}</td>
+                                <td>{{ assignment.created_at.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    {% if assignment.due_date %}
+                                        {{ assignment.due_date.strftime('%Y-%m-%d %I:%M %p') }}
+                                    {% else %}
+                                        <span class="text-muted">No due date</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('teacher.view_assignment', assignment_id=assignment.id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                        <a href="{{ url_for('teacher.edit_assignment', assignment_id=assignment.id) }}" class="btn btn-sm btn-warning">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <button class="btn btn-sm btn-danger delete-assignment" 
+                                                data-id="{{ assignment.id }}"
+                                                data-title="{{ assignment.title }}">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i> You haven't created any assignments yet. 
+        <a href="{{ url_for('teacher.new_assignment') }}">Create your first assignment</a>.
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add event listeners to all delete buttons
+        const deleteButtons = document.querySelectorAll('.delete-assignment');
+        deleteButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const assignmentId = this.getAttribute('data-id');
+                const assignmentTitle = this.getAttribute('data-title');
+                
+                if (confirm('Are you sure you want to delete the assignment "' + assignmentTitle + '"?\n\nThis will also delete:\n- All student submissions\n- All section assignments\n- All question assignments\n\nThis action cannot be undone.')) {
+                    window.location.href = "{{ url_for('teacher.delete_assignment', assignment_id=0) }}".replace('0', assignmentId);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %} 

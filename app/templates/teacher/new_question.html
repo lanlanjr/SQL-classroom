@@ -1,0 +1,417 @@
+{% extends "layout.html" %}
+
+{% block title %}New Question - SQL Classroom{% endblock %}
+
+{% block styles %}
+<style>
+    .CodeMirror {
+        height: 200px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .db-sqlite #mysql-section {
+        display: none;
+    }
+    .db-mysql #schema-section {
+        display: none;
+    }
+    #editor-container {
+        height: 250px;
+        margin-bottom: 10px;
+    }
+    .ql-editor {
+        min-height: 200px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Create New Question</h1>
+    <a href="{{ url_for('teacher.questions') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Back to Questions
+    </a>
+</div>
+
+<div class="card shadow">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('teacher.new_question') }}" id="questionForm" class="db-sqlite">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-3">
+                <label for="title" class="form-label">Question Title</label>
+                <input type="text" class="form-control" id="title" name="title" required>
+                <div class="form-text">A short, descriptive title for the question.</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Question Description</label>
+                <div id="editor-container"></div>
+                <textarea class="form-control" id="description" name="description" style="display: none;"></textarea>
+                <div class="form-text">Detailed description of the question. You can include hints and requirements.</div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="difficulty" class="form-label">Difficulty Level</label>
+                    <select class="form-select" id="difficulty" name="difficulty" required>
+                        <option value="1">1 - Very Easy</option>
+                        <option value="2">2 - Easy</option>
+                        <option value="3" selected>3 - Medium</option>
+                        <option value="4">4 - Hard</option>
+                        <option value="5">5 - Very Hard</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-6 mb-3">
+                    <label for="db_type" class="form-label">Database Type</label>
+                    <select class="form-select" id="db_type" name="db_type" required onchange="switchDbType(this.value)">
+                        <option value="sqlite" selected>In-memory SQLite (with schema)</option>
+                        <option value="mysql">MySQL (existing database)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div id="mysql-section" class="mb-3">
+                <label for="mysql_db_name" class="form-label">MySQL Database Name</label>
+                <input type="text" class="form-control" id="mysql_db_name" name="mysql_db_name">
+                <div class="form-text">Enter the name of an existing MySQL database on localhost (user: root).</div>
+                <div class="alert alert-info mt-2">
+                    <i class="fas fa-info-circle me-2"></i> Using MySQL connection: localhost:3306 (user: root)
+                </div>
+            </div>
+            
+            <div id="schema-section" class="mb-3">
+                <label for="sample_db_schema" class="form-label">Sample Database Schema</label>
+                <textarea class="form-control" id="sample_db_schema" name="sample_db_schema" rows="8"></textarea>
+                <div class="form-text">SQL statements to create the database schema and populate it with sample data.</div>
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="load-sample-schema">
+                    <i class="fas fa-plus-circle me-1"></i> Load Sample Schema
+                </button>
+            </div>
+            
+            <div class="mb-3">
+                <label for="correct_answer" class="form-label">Correct Answer</label>
+                <textarea class="form-control" id="correct_answer" name="correct_answer" rows="6" required></textarea>
+                <div class="form-text">For SQL questions, this should be the SQL query that correctly answers the question.</div>
+            </div>
+            
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="disable_copy_paste" name="disable_copy_paste">
+                <label class="form-check-label" for="disable_copy_paste">Disable copy and paste in SQL editor</label>
+                <div class="form-text">When enabled, students cannot copy and paste text in the SQL editor for this question.</div>
+            </div>
+            
+            <!-- Add a hidden field for question_type -->
+            <input type="hidden" name="question_type" value="free_response">
+            
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary" id="submitButton">Create Question</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Include Quill library -->
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.0-rc.2/dist/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.0-rc.2/dist/quill.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("Document loaded, initializing editors");
+        
+        // Define Quill custom formats
+        const AlignStyle = Quill.import('attributors/style/align');
+        const BackgroundStyle = Quill.import('attributors/style/background');
+        const ColorStyle = Quill.import('attributors/style/color');
+        const DirectionStyle = Quill.import('attributors/style/direction');
+        const FontStyle = Quill.import('attributors/style/font');
+        const SizeStyle = Quill.import('attributors/style/size');
+        
+        // Register formats with Quill
+        Quill.register(AlignStyle, true);
+        Quill.register(BackgroundStyle, true);
+        Quill.register(ColorStyle, true);
+        Quill.register(DirectionStyle, true);
+        Quill.register(FontStyle, true);
+        Quill.register(SizeStyle, true);
+        
+        // Get references to any needed elements
+        const editorContainer = document.getElementById('editor-container');
+        
+        // Define custom color and background color palettes
+        const colorPalette = [
+            "#000000", "#e60000", "#ff9900", "#ffff00", "#008a00", 
+            "#0066cc", "#9933ff", "#ffffff", "#facccc", "#ffebcc", 
+            "#ffffcc", "#cce8cc", "#cce0f5", "#ebd6ff", "#bbbbbb", 
+            "#f06666", "#ffc266", "#ffff66", "#66b966", "#66a3e0", 
+            "#c285ff", "#888888", "#a10000", "#b26b00", "#b2b200", 
+            "#006100", "#0047b2", "#6b24b2", "#444444", "#5c0000", 
+            "#663d00", "#666600", "#003700", "#002966", "#3d1466"
+        ];
+        
+        // Initialize Quill editor with enhanced configuration
+        const quill = new Quill(editorContainer, {
+            theme: 'snow',
+            modules: {
+                toolbar: {
+                    container: [
+                        [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+                        ['bold', 'italic', 'underline', 'strike'],
+                        [{ 'color': colorPalette }, { 'background': colorPalette }],
+                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                        [{ 'script': 'sub'}, { 'script': 'super' }],
+                        ['blockquote', 'code-block'],
+                        ['link', 'image'],
+                        [{ 'indent': '-1'}, { 'indent': '+1' }],
+                        [{ 'align': [] }],
+                        ['clean']
+                    ],
+                    handlers: {
+                        'image': function() {
+                            // Create file input
+                            const input = document.createElement('input');
+                            input.setAttribute('type', 'file');
+                            input.setAttribute('accept', 'image/*');
+                            input.click();
+                            
+                            // Listen for file selection
+                            input.onchange = function() {
+                                if (input.files && input.files[0]) {
+                                    const file = input.files[0];
+                                    uploadImageAndInsert(file);
+                                }
+                            };
+                        }
+                    }
+                }
+            },
+            formats: [
+                'header', 'bold', 'italic', 'underline', 'strike',
+                'color', 'background', 'script', 'list', 'bullet',
+                'indent', 'align', 'link', 'image', 'blockquote', 'code-block',
+                'direction', 'font', 'size'
+            ],
+            placeholder: 'Write your question description...'
+        });
+        
+        // Ensure selection is properly maintained by handling selection changes
+        quill.on('selection-change', function(range, oldRange, source) {
+            if (range) {
+                // When a new selection is made, save it to the Quill instance for later use
+                quill.lastKnownRange = range;
+            }
+        });
+        
+        // Function to upload image to server and insert into editor
+        function uploadImageAndInsert(file) {
+            // Show loading indicator
+            const range = quill.getSelection() || { index: quill.getLength() };
+            
+            // Insert temporary placeholder
+            const placeholderIndex = range.index;
+            quill.insertText(placeholderIndex, 'Uploading image...');
+            
+            // Create form data for upload
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Upload to server
+            fetch('{{ url_for("teacher.upload_image") }}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove placeholder
+                quill.deleteText(placeholderIndex, 'Uploading image...'.length);
+                
+                if (data.success) {
+                    // Insert the image with the returned URL
+                    quill.insertEmbed(placeholderIndex, 'image', data.url);
+                    // Move cursor after image
+                    quill.setSelection(placeholderIndex + 1);
+                } else {
+                    // Show error
+                    console.error('Image upload failed:', data.error);
+                    quill.insertText(placeholderIndex, 'Image upload failed: ' + data.error);
+                }
+            })
+            .catch(error => {
+                // Remove placeholder and show error
+                quill.deleteText(placeholderIndex, 'Uploading image...'.length);
+                quill.insertText(placeholderIndex, 'Image upload failed: ' + error.message);
+                console.error('Image upload error:', error);
+            });
+        }
+        
+        // Enable clipboard paste for images
+        quill.root.addEventListener('paste', function(e) {
+            if (e.clipboardData && e.clipboardData.items) {
+                const items = e.clipboardData.items;
+                
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf('image') !== -1) {
+                        // Cancel paste to handle manually
+                        e.preventDefault();
+                        
+                        const file = items[i].getAsFile();
+                        if (!file) continue;
+                        
+                        // Upload and insert the image
+                        uploadImageAndInsert(file);
+                        
+                        // Only handle the first image
+                        break;
+                    }
+                }
+            }
+        });
+        
+        // Initialize CodeMirror editors
+        let correctAnswerEditor = CodeMirror.fromTextArea(document.getElementById('correct_answer'), {
+            mode: 'text/x-sql',
+            theme: 'dracula',
+            lineNumbers: true,
+            indentWithTabs: true,
+            smartIndent: true,
+            lineWrapping: true,
+            matchBrackets: true
+        });
+        
+        let schemaEditor = CodeMirror.fromTextArea(document.getElementById('sample_db_schema'), {
+            mode: 'text/x-sql',
+            theme: 'dracula',
+            lineNumbers: true,
+            indentWithTabs: true,
+            smartIndent: true,
+            lineWrapping: true,
+            matchBrackets: true
+        });
+        
+        // Force a refresh of the editors to ensure they're visible and properly sized
+        setTimeout(function() {
+            correctAnswerEditor.refresh();
+            schemaEditor.refresh();
+        }, 100);
+        
+        // Save the content from CodeMirror to the textareas before submitting
+        document.getElementById('submitButton').addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log("Saving editor content to form fields");
+            
+            // Save CodeMirror content to textareas
+            correctAnswerEditor.save();
+            schemaEditor.save();
+            
+            // Save Quill content to the hidden textarea
+            document.getElementById('description').value = quill.root.innerHTML;
+            
+            // Debug - log content before submission
+            console.log('Submitting content:', quill.root.innerHTML);
+            
+            console.log("Form validation");
+            // Simple form validation
+            const dbType = document.getElementById('db_type').value;
+            if (dbType === 'sqlite' && !document.getElementById('sample_db_schema').value.trim()) {
+                alert('Please provide a database schema for SQLite');
+                return;
+            }
+            
+            if (dbType === 'mysql' && !document.getElementById('mysql_db_name').value.trim()) {
+                alert('Please provide a MySQL database name');
+                return;
+            }
+            
+            if (!document.getElementById('correct_answer').value.trim()) {
+                alert('Please provide a correct answer');
+                return;
+            }
+            
+            console.log("Submitting form");
+            document.getElementById('questionForm').submit();
+        });
+
+        // Handle "Load Sample Schema" button click
+        document.getElementById('load-sample-schema').addEventListener('click', function() {
+            const sampleSchema = `-- Create tables
+CREATE TABLE students (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE,
+    age INTEGER,
+    enrollment_date DATE,
+    gpa REAL
+);
+
+CREATE TABLE courses (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    department TEXT,
+    credits INTEGER DEFAULT 3
+);
+
+CREATE TABLE enrollments (
+    student_id INTEGER,
+    course_id INTEGER,
+    semester TEXT,
+    grade TEXT,
+    PRIMARY KEY (student_id, course_id),
+    FOREIGN KEY (student_id) REFERENCES students(id),
+    FOREIGN KEY (course_id) REFERENCES courses(id)
+);
+
+-- Insert sample data
+INSERT INTO students (id, name, email, age, enrollment_date, gpa) VALUES
+(1, 'John Smith', 'john@example.com', 20, '2022-09-01', 3.5),
+(2, 'Mary Johnson', 'mary@example.com', 21, '2021-09-01', 3.9),
+(3, 'Robert Davis', 'robert@example.com', 19, '2023-01-15', 3.2),
+(4, 'Jennifer Wilson', 'jennifer@example.com', 22, '2021-01-15', 3.7),
+(5, 'Michael Brown', 'michael@example.com', 20, '2022-09-01', 3.1);
+
+INSERT INTO courses (id, title, department, credits) VALUES
+(101, 'Introduction to Computer Science', 'CS', 4),
+(102, 'Database Systems', 'CS', 3),
+(103, 'Calculus I', 'MATH', 4),
+(104, 'English Composition', 'ENG', 3),
+(105, 'Data Structures', 'CS', 4);
+
+INSERT INTO enrollments (student_id, course_id, semester, grade) VALUES
+(1, 101, 'Fall 2022', 'A'),
+(1, 103, 'Fall 2022', 'B+'),
+(2, 101, 'Fall 2021', 'A'),
+(2, 102, 'Spring 2022', 'A'),
+(2, 103, 'Fall 2021', 'A-'),
+(3, 101, 'Spring 2023', 'B'),
+(3, 104, 'Spring 2023', 'A'),
+(4, 103, 'Spring 2021', 'A'),
+(4, 105, 'Fall 2021', 'A-'),
+(5, 101, 'Fall 2022', 'B-'),
+(5, 104, 'Fall 2022', 'B+');`;
+
+            // Set the sample schema in the CodeMirror editor
+            schemaEditor.setValue(sampleSchema);
+        });
+    });
+    
+    // Function to switch between database types
+    function switchDbType(type) {
+        console.log("Switching database type to: " + type);
+        const form = document.getElementById('questionForm');
+        
+        if (type === 'sqlite') {
+            form.className = 'db-sqlite';
+            document.getElementById('schema-section').style.display = 'block';
+            document.getElementById('mysql-section').style.display = 'none';
+        } else {
+            form.className = 'db-mysql';
+            document.getElementById('schema-section').style.display = 'none';
+            document.getElementById('mysql-section').style.display = 'block';
+        }
+    }
+</script>
+{% endblock %} 
