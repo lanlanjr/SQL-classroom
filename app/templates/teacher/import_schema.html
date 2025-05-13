@@ -7,25 +7,25 @@
     <h2>Import Database Schema</h2>
     
     <div class="card">
-        <div class="card-body">
-            <form method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                
-                <div class="mb-3">
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="mb-3">
                     <label for="db_name" class="form-label">Base Database Name</label>
                     <input type="text" class="form-control" id="db_name" name="db_name" required
                            placeholder="Enter the base name for your database">
                     <div class="form-text">Use only letters, numbers, and underscores.</div>
-                </div>
-                
-                <div class="mb-3">
+                    </div>
+                    
+                    <div class="mb-3">
                     <label for="prefix_type" class="form-label">Database Prefix</label>
                     <select class="form-select" id="prefix_type" name="prefix_type">
                         <option value="none">No Prefix</option>
                         <option value="assignment">Student Assignment Prefix</option>
                         <option value="template">Template Assignment Prefix</option>
                     </select>
-                    <div class="form-text">
+                        <div class="form-text">
                         Choose a prefix type for your database:
                         <ul>
                             <li>No Prefix: Use the base name as is</li>
@@ -39,10 +39,10 @@
                     <label for="schema_file" class="form-label">SQL Schema File</label>
                     <input type="file" class="form-control" id="schema_file" name="schema_file" accept=".sql" required>
                     <div class="form-text">Upload a .sql file containing your database schema.</div>
-                </div>
-                
+                    </div>
+                    
                 <button type="submit" class="btn btn-primary">Import Schema</button>
-            </form>
+                </form>
         </div>
     </div>
     
