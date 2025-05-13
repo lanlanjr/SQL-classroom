@@ -16,7 +16,11 @@ login_manager = LoginManager()
 migrate = Migrate()
 csrf = CSRFProtect()
 
-def create_app():
+def create_app(*args, **kwargs):
+    """
+    Application factory function that accepts optional arguments.
+    PythonAnywhere's WSGI server might pass arguments that we can safely ignore.
+    """
     app = Flask(__name__)
     
     # Get database name from environment variable
