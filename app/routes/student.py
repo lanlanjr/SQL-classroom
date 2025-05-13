@@ -332,43 +332,57 @@ def get_student_db_connection(question):
         raise ValueError("Invalid question or missing database name")
         
     try:
-        # First try to connect with root to ensure database exists
-        root_conn = pymysql.connect(
+        # Get database prefixes from environment
+        assignments_prefix = os.environ.get('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')
+        template_prefix = os.environ.get('TEMPLATE_DB_PREFIX', 'template_assignment_')
+        
+        # Connect using the main application database user
+        conn = pymysql.connect(
             host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_USER', 'root'),
+            user=os.environ.get('MYSQL_USER', 'root'),  # Use main application user
             password=os.environ.get('MYSQL_PASSWORD', 'admin'),
             port=int(os.environ.get('MYSQL_PORT', 3306)),
             cursorclass=pymysql.cursors.DictCursor
         )
         
-        with root_conn.cursor() as cursor:
+        with conn.cursor() as cursor:
             # Check if database exists
             cursor.execute("SHOW DATABASES")
             databases = [row['Database'] for row in cursor.fetchall()]
             
-            if question.mysql_db_name not in databases:
-                raise ValueError(f"Database '{question.mysql_db_name}' does not exist")
+            # Check both with and without prefixes
+            possible_names = [
+                question.mysql_db_name,
+                f"{assignments_prefix}{question.mysql_db_name}",
+                f"{template_prefix}{question.mysql_db_name}"
+            ]
             
-            # Ensure student user has proper permissions
-            cursor.execute(f"GRANT SELECT ON {question.mysql_db_name}.* TO 'sql_student'@'localhost'")
-            cursor.execute("FLUSH PRIVILEGES")
+            db_name = None
+            for name in possible_names:
+                if name in databases:
+                    db_name = name
+                    break
+                    
+            if not db_name:
+                raise ValueError(f"Database '{question.mysql_db_name}' (or its prefixed versions) does not exist")
         
-        root_conn.close()
+        # Close the initial connection
+        conn.close()
         
-        # Now connect with student user
+        # Create a new connection with the specific database
         conn = pymysql.connect(
             host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_STUDENT_USER', 'sql_student'),
-            password=os.environ.get('MYSQL_STUDENT_PASSWORD', 'student_password'),
+            user=os.environ.get('MYSQL_USER', 'root'),  # Use main application user
+            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
             port=int(os.environ.get('MYSQL_PORT', 3306)),
-            database=question.mysql_db_name,
+            database=db_name,
             cursorclass=pymysql.cursors.DictCursor
         )
         return conn
     except pymysql.Error as e:
         print(f"Error connecting to database: {str(e)}")
         if "Access denied" in str(e):
-            raise ValueError(f"Access denied to database '{question.mysql_db_name}'. Please contact your teacher.")
+            raise ValueError(f"Access denied to database. Please contact your teacher.")
         raise
 
 def validate_student_query(query):
@@ -398,7 +412,10 @@ def validate_student_query(query):
         'GRANT', 'REVOKE', 'ROLE',
         'INSERT', 'UPDATE', 'DELETE',
         'PROCEDURE', 'FUNCTION', 'TRIGGER', 'EVENT',
-        'LOAD', 'CALL', 'LOCK', 'UNLOCK'
+        'LOAD', 'CALL', 'LOCK', 'UNLOCK',
+        'INTO OUTFILE', 'INTO DUMPFILE',  # Prevent file operations
+        'INFORMATION_SCHEMA', 'PERFORMANCE_SCHEMA',  # Restrict access to system schemas
+        'UNION', 'UNION ALL'  # Prevent UNION attacks
     ]
     
     # Split query into words and check for forbidden keywords
@@ -409,6 +426,13 @@ def validate_student_query(query):
             if keyword == 'CREATE' and 'SHOW CREATE TABLE' in query_upper:
                 continue
             raise ValueError(f"Query contains forbidden keyword: {keyword}")
+    
+    # Additional security checks
+    if '--' in query or '#' in query:
+        raise ValueError("SQL comments are not allowed")
+    
+    if 'INTO OUTFILE' in query_upper or 'INTO DUMPFILE' in query_upper:
+        raise ValueError("File operations are not allowed")
     
     return True
 
@@ -496,7 +520,7 @@ def execute_query():
                 return jsonify({'error': f'SQL Error: {clean_message}'}), 400
             except Exception as e:
                 print(f"MySQL query error: {str(e)}")
-                return jsonify({'error': 'An error occurred while executing the query'}), 400
+                return jsonify({'error': f'{str(e.args[1])}'}), 400
             
         else:
             # SQLite - Create a fresh in-memory database for each query execution
@@ -722,7 +746,7 @@ def submit_answer():
                 return jsonify({'error': str(e)}), 400
             except Exception as e:
                 print(f"MySQL grading error: {str(e)}")
-                return jsonify({'error': 'An error occurred while grading your submission'}), 400
+                return jsonify({'error': f'{str(e.args[1])}'}), 400
                 
         else:
             # SQLite grading using SQLAlchemy

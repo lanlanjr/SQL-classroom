@@ -7,6 +7,10 @@ from app.models import User
 from migrations.unified_migration import upgrade as run_migrations
 import pymysql
 from sqlalchemy import text, inspect
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def reset_database():
     app = create_app()
@@ -15,6 +19,9 @@ def reset_database():
         print("Starting database reset...")
         
         try:
+            # Get database name from environment
+            app_db_name = os.environ.get('APP_DB_NAME', 'sql_classroom')
+            
             # Create the database if it doesn't exist
             connection = pymysql.connect(
                 host=os.environ.get('MYSQL_HOST', 'localhost'),
@@ -24,11 +31,11 @@ def reset_database():
             )
             with connection.cursor() as cursor:
                 # Drop the database if it exists and create it fresh
-                cursor.execute("DROP DATABASE IF EXISTS sql_classroom")
-                cursor.execute("CREATE DATABASE sql_classroom")
-                cursor.execute("USE sql_classroom")
+                cursor.execute(f"DROP DATABASE IF EXISTS {app_db_name}")
+                cursor.execute(f"CREATE DATABASE {app_db_name}")
+                cursor.execute(f"USE {app_db_name}")
             connection.close()
-            print("Created fresh database")
+            print(f"Created fresh database: {app_db_name}")
             
             # Create core tables
             db.create_all()

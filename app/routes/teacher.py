@@ -1304,150 +1304,124 @@ def delete_assignment(assignment_id):
 @login_required
 def import_schema():
     if request.method == 'POST':
+        # Get database name and prefix from form and environment
+        base_name = request.form.get('db_name')
+        prefix_type = request.form.get('prefix_type', 'none')  # none, assignment, or template
+        
+        if not base_name:
+            flash('Database name is required', 'danger')
+            return redirect(url_for('teacher.import_schema'))
+            
+        # Apply prefix if selected
+        if prefix_type == 'assignment':
+            db_name = f"{os.environ.get('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')}{base_name}"
+        elif prefix_type == 'template':
+            db_name = f"{os.environ.get('TEMPLATE_DB_PREFIX', 'template_assignment_')}{base_name}"
+        else:
+            db_name = base_name
+            
+        # Get schema file
+        if 'schema_file' not in request.files:
+            flash('No file uploaded', 'danger')
+            return redirect(url_for('teacher.import_schema'))
+            
+        file = request.files['schema_file']
+        if file.filename == '':
+            flash('No file selected', 'danger')
+            return redirect(url_for('teacher.import_schema'))
+            
+        if not file.filename.endswith('.sql'):
+            flash('Only .sql files are allowed', 'danger')
+            return redirect(url_for('teacher.import_schema'))
+            
+        # Read and parse SQL file
         try:
-            # Get the schema file
-            if 'schema_file' not in request.files:
-                flash('No file uploaded', 'danger')
-                return redirect(url_for('teacher.import_schema'))
-            
-            schema_file = request.files['schema_file']
-            if schema_file.filename == '':
-                flash('No file selected', 'danger')
-                return redirect(url_for('teacher.import_schema'))
-            
-            # Get database name from form
-            db_name = request.form.get('database_name')
-            if not db_name:
-                flash('Database name is required', 'danger')
-                return redirect(url_for('teacher.import_schema'))
-            
-            # Validate database name to prevent SQL injection
-            if not db_name.isalnum() and not '_' in db_name:
-                flash('Database name can only contain letters, numbers, and underscores', 'danger')
-                return redirect(url_for('teacher.import_schema'))
-            
-            # Read schema content
-            try:
-                schema_content = schema_file.read().decode('utf-8')
-            except UnicodeDecodeError:
-                flash('Invalid file encoding. Please ensure the file is saved with UTF-8 encoding.', 'danger')
-                return redirect(url_for('teacher.import_schema'))
-            
-            # Split schema into individual statements and validate
+            schema_content = file.read().decode('utf-8')
             statements = [stmt.strip() for stmt in schema_content.split(';') if stmt.strip()]
-            if not statements:
-                flash('No valid SQL statements found in the file', 'danger')
-                return redirect(url_for('teacher.import_schema'))
-            
-            # Try to establish connection with increased timeout
-            try:
-                connection = pymysql.connect(
-                    host=os.environ.get('MYSQL_HOST', 'localhost'),
-                    user=os.environ.get('MYSQL_USER', 'root'),
-                    password=os.environ.get('MYSQL_PASSWORD', 'admin'),
-                    port=int(os.environ.get('MYSQL_PORT', 3306)),
-                    connect_timeout=30,
-                    read_timeout=30,
-                    write_timeout=30
-                )
-            except pymysql.Error as e:
-                flash(f'Could not connect to MySQL server: {str(e)}', 'danger')
-                return redirect(url_for('teacher.import_schema'))
-            
-            try:
-                with connection.cursor() as cursor:
-                    # Drop database if it exists and create new one
-                    cursor.execute(f"DROP DATABASE IF EXISTS {db_name}")
-                    cursor.execute(f"CREATE DATABASE {db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-                    cursor.execute(f"USE {db_name}")
-                    
-                    # Set session variables for better compatibility
-                    cursor.execute("SET SESSION sql_mode = ''")
-                    cursor.execute("SET foreign_key_checks = 0")
-                    cursor.execute("SET unique_checks = 0")
-                    cursor.execute("SET autocommit = 0")
-                    
-                    # First pass: Create tables without foreign keys
-                    create_table_statements = []
-                    other_statements = []
-                    
-                    for statement in statements:
-                        if statement.strip().upper().startswith('CREATE TABLE'):
-                            create_table_statements.append(statement)
-                        else:
-                            other_statements.append(statement)
-                    
-                    # Execute CREATE TABLE statements first
-                    for statement in create_table_statements:
-                        try:
-                            cursor.execute(statement)
-                        except pymysql.Error as e:
-                            if "already exists" not in str(e).lower():
-                                print(f"Error creating table: {str(e)}")
-                                # Continue with other statements
-                    
-                    # Commit table creation
-                    connection.commit()
-                    
-                    # Second pass: Add foreign keys and other constraints
-                    for statement in other_statements:
-                        try:
-                            if statement.strip():
-                                cursor.execute(statement)
-                        except pymysql.Error as e:
-                            print(f"Error executing statement: {str(e)}")
-                            # Continue with other statements
-                    
-                    # Reset session variables
-                    cursor.execute("SET foreign_key_checks = 1")
-                    cursor.execute("SET unique_checks = 1")
-                    cursor.execute("SET autocommit = 1")
-                    
-                    # Create or update student user with proper permissions
-                    try:
-                        cursor.execute("DROP USER IF EXISTS 'sql_student'@'localhost'")
-                        cursor.execute("CREATE USER 'sql_student'@'localhost' IDENTIFIED BY 'student_password'")
-                    except pymysql.Error:
-                        cursor.execute("ALTER USER 'sql_student'@'localhost' IDENTIFIED BY 'student_password'")
-                    
-                    # Grant SELECT permissions on the new database
-                    cursor.execute(f"GRANT SELECT ON {db_name}.* TO 'sql_student'@'localhost'")
-                    
-                    # Grant SELECT permissions on all existing databases used in questions
-                    try:
-                        # Get all unique MySQL database names from questions
-                        cursor.execute("SELECT DISTINCT mysql_db_name FROM question WHERE db_type = 'mysql' AND mysql_db_name IS NOT NULL")
-                        existing_dbs = [row[0] for row in cursor.fetchall()]
-                        
-                        # Grant permissions for each database
-                        for db in existing_dbs:
-                            try:
-                                cursor.execute(f"GRANT SELECT ON {db}.* TO 'sql_student'@'localhost'")
-                            except pymysql.Error as e:
-                                print(f"Warning: Could not grant permissions for database {db}: {str(e)}")
-                    except pymysql.Error as e:
-                        print(f"Warning: Could not retrieve existing databases: {str(e)}")
-                    
-                    cursor.execute("FLUSH PRIVILEGES")
-                    
-                flash(f'Schema imported successfully to database "{db_name}"', 'success')
-                
-            except Exception as e:
-                connection.rollback()
-                flash(f'Error importing schema: {str(e)}', 'danger')
-            finally:
-                try:
-                    cursor.execute("SET foreign_key_checks = 1")
-                    cursor.execute("SET unique_checks = 1")
-                    cursor.execute("SET autocommit = 1")
-                except:
-                    pass
-                connection.close()
-            
-            return redirect(url_for('teacher.import_schema'))
-            
         except Exception as e:
-            flash(f'Error: {str(e)}', 'danger')
+            flash(f'Error reading SQL file: {str(e)}', 'danger')
             return redirect(url_for('teacher.import_schema'))
+            
+        # Try to establish connection with increased timeout
+        try:
+            connection = pymysql.connect(
+                host=os.environ.get('MYSQL_HOST', 'localhost'),
+                user=os.environ.get('MYSQL_USER', 'root'),
+                password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                port=int(os.environ.get('MYSQL_PORT', 3306)),
+                connect_timeout=30,
+                read_timeout=30,
+                write_timeout=30
+            )
+        except pymysql.Error as e:
+            flash(f'Could not connect to MySQL server: {str(e)}', 'danger')
+            return redirect(url_for('teacher.import_schema'))
+            
+        try:
+            with connection.cursor() as cursor:
+                # Drop database if it exists and create new one
+                cursor.execute(f"DROP DATABASE IF EXISTS {db_name}")
+                cursor.execute(f"CREATE DATABASE {db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+                cursor.execute(f"USE {db_name}")
+                
+                # Set session variables for better compatibility
+                cursor.execute("SET SESSION sql_mode = ''")
+                cursor.execute("SET foreign_key_checks = 0")
+                cursor.execute("SET unique_checks = 0")
+                cursor.execute("SET autocommit = 0")
+                
+                # First pass: Create tables without foreign keys
+                create_table_statements = []
+                other_statements = []
+                
+                for statement in statements:
+                    if statement.strip().upper().startswith('CREATE TABLE'):
+                        create_table_statements.append(statement)
+                    else:
+                        other_statements.append(statement)
+                
+                # Execute CREATE TABLE statements first
+                for statement in create_table_statements:
+                    try:
+                        cursor.execute(statement)
+                    except pymysql.Error as e:
+                        if "already exists" not in str(e).lower():
+                            print(f"Error creating table: {str(e)}")
+                            # Continue with other statements
+                
+                # Execute remaining statements
+                for statement in other_statements:
+                    try:
+                        cursor.execute(statement)
+                    except pymysql.Error as e:
+                        print(f"Error executing statement: {str(e)}")
+                        # Continue with other statements
+                
+                # Commit all changes
+                connection.commit()
+                
+                # Reset session variables
+                cursor.execute("SET foreign_key_checks = 1")
+                cursor.execute("SET unique_checks = 1")
+                cursor.execute("SET autocommit = 1")
+                
+                # Grant permissions to student user
+                cursor.execute(f"GRANT SELECT ON {db_name}.* TO 'sql_student'@'localhost'")
+                cursor.execute("FLUSH PRIVILEGES")
+                
+                flash(f'Successfully imported schema to database: {db_name}', 'success')
+                return redirect(url_for('teacher.import_schema'))
+                
+        except Exception as e:
+            flash(f'Error importing schema: {str(e)}', 'danger')
+            return redirect(url_for('teacher.import_schema'))
+        finally:
+            connection.close()
     
-    return render_template('teacher/import_schema.html') 
+    # Get prefix information from environment for the template
+    prefix_student = os.environ.get('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')
+    prefix_template = os.environ.get('TEMPLATE_DB_PREFIX', 'template_assignment_')
+    
+    return render_template('teacher/import_schema.html',
+                         prefix_student=prefix_student,
+                         prefix_template=prefix_template) 
