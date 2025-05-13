@@ -1,4 +1,38 @@
+# Environment variables
 .env
-__pycache__
-*.pyc
+
+# Python cache files
+app/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+
+# Build and distribution
+dist/
+build/
+*.egg-info/
+
 wsgi.py

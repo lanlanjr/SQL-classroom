@@ -7,6 +7,12 @@ from flask_login import user_logged_in
 from flask import current_app, jsonify
 import os
 
+# Update the url_parse import to handle both old and new Werkzeug versions
+try:
+    from werkzeug.urls import url_parse
+except ImportError:
+    from urllib.parse import urlparse as url_parse
+
 auth = Blueprint('auth', __name__)
 
 # Debug route - only available in development mode
