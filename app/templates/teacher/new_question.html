@@ -9,12 +9,23 @@
         border: 1px solid #ddd;
         border-radius: 4px;
     }
-    .db-sqlite #mysql-section {
-        display: none;
+    
+    /* Database type specific styles */
+    .db-sqlite #mysql-section,
+    .db-sqlite #imported-schema-section {
+        display: none !important;
     }
-    .db-mysql #schema-section {
-        display: none;
+    
+    .db-mysql #schema-section,
+    .db-mysql #imported-schema-section {
+        display: none !important;
     }
+    
+    .db-imported-schema #schema-section,
+    .db-imported-schema #mysql-section {
+        display: none !important;
+    }
+    
     #editor-container {
         height: 250px;
         margin-bottom: 10px;
@@ -65,13 +76,23 @@
                 <div class="col-md-6 mb-3">
                     <label for="db_type" class="form-label">Database Type</label>
                     <select class="form-select" id="db_type" name="db_type" required onchange="switchDbType(this.value)">
-                        <option value="sqlite" selected>In-memory SQLite (with schema)</option>
+                        <option value="sqlite">In-memory SQLite (with schema)</option>
                         <option value="mysql">MySQL (existing database)</option>
+                        <option value="imported_schema">Imported Schema</option>
                     </select>
                 </div>
             </div>
             
-            <div id="mysql-section" class="mb-3">
+            <div id="schema-section" class="mb-3">
+                <label for="sample_db_schema" class="form-label">Database Schema</label>
+                <textarea class="form-control" id="sample_db_schema" name="sample_db_schema" rows="10"></textarea>
+                <div class="form-text">Enter the SQL schema for the in-memory database. This will be used to create tables and insert sample data.</div>
+                <button type="button" class="btn btn-outline-secondary mt-2" id="load-sample-schema">
+                    <i class="fas fa-file-import me-2"></i> Load Sample Schema
+                </button>
+            </div>
+            
+            <div id="mysql-section" class="mb-3" style="display: none;">
                 <label for="mysql_db_name" class="form-label">MySQL Database Name</label>
                 <input type="text" class="form-control" id="mysql_db_name" name="mysql_db_name">
                 <div class="form-text">Enter the name of an existing MySQL database on localhost (user: root).</div>
@@ -80,13 +101,23 @@
                 </div>
             </div>
             
-            <div id="schema-section" class="mb-3">
-                <label for="sample_db_schema" class="form-label">Sample Database Schema</label>
-                <textarea class="form-control" id="sample_db_schema" name="sample_db_schema" rows="8"></textarea>
-                <div class="form-text">SQL statements to create the database schema and populate it with sample data.</div>
-                <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="load-sample-schema">
-                    <i class="fas fa-plus-circle me-1"></i> Load Sample Schema
-                </button>
+            <div id="imported-schema-section" class="mb-3" style="display: none;">
+                <label for="schema_import_id" class="form-label">Select Imported Schema</label>
+                <select class="form-select" id="schema_import_id" name="schema_import_id">
+                    <option value="">-- Select a Schema --</option>
+                    {% if schemas %}
+                        {% for schema in schemas %}
+                        <option value="{{ schema.id }}">{{ schema.name }} {% if schema.description %}({{ schema.description }}){% endif %}</option>
+                        {% endfor %}
+                    {% endif %}
+                </select>
+                <div class="form-text">Select a previously imported schema to use for this question.</div>
+                {% if not schemas %}
+                <div class="alert alert-warning mt-2">
+                    <i class="fas fa-exclamation-triangle me-2"></i> No schemas imported yet. 
+                    <a href="{{ url_for('teacher.import_schema') }}" class="alert-link">Import a schema first</a>.
+                </div>
+                {% endif %}
             </div>
             
             <div class="mb-3">
@@ -396,6 +427,12 @@ INSERT INTO enrollments (student_id, course_id, semester, grade) VALUES
             // Set the sample schema in the CodeMirror editor
             schemaEditor.setValue(sampleSchema);
         });
+
+        // Initialize the correct section based on the current db_type value
+        const dbTypeSelect = document.getElementById('db_type');
+        if (dbTypeSelect) {
+            switchDbType(dbTypeSelect.value);
+        }
     });
     
     // Function to switch between database types
@@ -403,14 +440,22 @@ INSERT INTO enrollments (student_id, course_id, semester, grade) VALUES
         console.log("Switching database type to: " + type);
         const form = document.getElementById('questionForm');
         
+        // Hide all database-specific sections first
+        document.getElementById('schema-section').style.display = 'none';
+        document.getElementById('mysql-section').style.display = 'none';
+        document.getElementById('imported-schema-section').style.display = 'none';
+        
+        // Show the appropriate section
         if (type === 'sqlite') {
             form.className = 'db-sqlite';
             document.getElementById('schema-section').style.display = 'block';
-            document.getElementById('mysql-section').style.display = 'none';
-        } else {
+        } else if (type === 'mysql') {
             form.className = 'db-mysql';
-            document.getElementById('schema-section').style.display = 'none';
             document.getElementById('mysql-section').style.display = 'block';
+        } else if (type === 'imported_schema') {
+            form.className = 'db-imported-schema';
+            document.getElementById('imported-schema-section').style.display = 'block';
+            console.log("Showing imported schema section");
         }
     }
 </script>

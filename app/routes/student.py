@@ -328,62 +328,76 @@ def view_question(question_id):
 
 def get_student_db_connection(question):
     """Create a restricted database connection for student query execution"""
-    if not question or not question.mysql_db_name:
-        raise ValueError("Invalid question or missing database name")
+    if not question:
+        raise ValueError("Invalid question")
         
-    try:
-        # Get database prefixes from environment
-        assignments_prefix = os.environ.get('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')
-        template_prefix = os.environ.get('TEMPLATE_DB_PREFIX', 'template_assignment_')
-        
-        # Connect using the main application database user
+    if question.db_type == 'imported_schema':
+        if not question.schema_import or not question.schema_import.active_schema_name:
+            raise ValueError("Question's imported schema is not properly configured")
+            
+        # Connect to the sql_classroom database using root user
         conn = pymysql.connect(
             host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_USER', 'root'),  # Use main application user
+            user=os.environ.get('MYSQL_USER', 'root'),
             password=os.environ.get('MYSQL_PASSWORD', 'admin'),
             port=int(os.environ.get('MYSQL_PORT', 3306)),
+            database='sql_classroom',
             cursorclass=pymysql.cursors.DictCursor
         )
         
-        with conn.cursor() as cursor:
-            # Check if database exists
-            cursor.execute("SHOW DATABASES")
-            databases = [row['Database'] for row in cursor.fetchall()]
-            
-            # Check both with and without prefixes
-            possible_names = [
-                question.mysql_db_name,
-                f"{assignments_prefix}{question.mysql_db_name}",
-                f"{template_prefix}{question.mysql_db_name}"
-            ]
-            
-            db_name = None
-            for name in possible_names:
-                if name in databases:
-                    db_name = name
-                    break
-                    
-            if not db_name:
-                raise ValueError(f"Database '{question.mysql_db_name}' (or its prefixed versions) does not exist")
-        
-        # Close the initial connection
-        conn.close()
-        
-        # Create a new connection with the specific database
-        conn = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_USER', 'root'),  # Use main application user
-            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
-            port=int(os.environ.get('MYSQL_PORT', 3306)),
-            database=db_name,
-            cursorclass=pymysql.cursors.DictCursor
-        )
         return conn
-    except pymysql.Error as e:
-        print(f"Error connecting to database: {str(e)}")
-        if "Access denied" in str(e):
-            raise ValueError(f"Access denied to database. Please contact your teacher.")
-        raise
+        
+    elif question.db_type == 'mysql':
+        if not question.mysql_db_name:
+            raise ValueError("Invalid question or missing database name")
+            
+        try:
+            # Get database prefixes from environment
+            assignments_prefix = os.environ.get('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')
+            template_prefix = os.environ.get('TEMPLATE_DB_PREFIX', 'template_assignment_')
+            
+            # Connect using root user
+            conn = pymysql.connect(
+                host=os.environ.get('MYSQL_HOST', 'localhost'),
+                user=os.environ.get('MYSQL_USER', 'root'),
+                password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                port=int(os.environ.get('MYSQL_PORT', 3306)),
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            
+            with conn.cursor() as cursor:
+                # Check if database exists
+                cursor.execute("SHOW DATABASES")
+                databases = [row['Database'] for row in cursor.fetchall()]
+                
+                # Check both with and without prefixes
+                possible_names = [
+                    question.mysql_db_name,
+                    f"{assignments_prefix}{question.mysql_db_name}",
+                    f"{template_prefix}{question.mysql_db_name}"
+                ]
+                
+                db_name = None
+                for name in possible_names:
+                    if name in databases:
+                        db_name = name
+                        break
+                        
+                if not db_name:
+                    raise ValueError(f"Database '{question.mysql_db_name}' (or its prefixed versions) does not exist")
+                
+                # Use the found database
+                cursor.execute(f"USE {db_name}")
+            
+            return conn
+            
+        except Exception as e:
+            print(f"Error connecting to database: {str(e)}")
+            if "Access denied" in str(e):
+                raise ValueError(f"Access denied to database. Please contact your teacher.")
+            raise
+    else:
+        raise ValueError(f"Unsupported database type: {question.db_type}")
 
 def validate_student_query(query):
     """Validate student query for potential harmful operations"""
@@ -441,12 +455,17 @@ def validate_student_query(query):
 @csrf.exempt
 def execute_query():
     data = request.json
-    query = data.get('query')
-    question_id = data.get('question_id')
-    assignment_id = data.get('assignment_id')
-    
-    if not query or not question_id or not assignment_id:
+    if not data or 'query' not in data or 'question_id' not in data or 'assignment_id' not in data:
         return jsonify({'error': 'Missing required parameters'}), 400
+    
+    query = data['query'].strip()
+    question_id = data['question_id']
+    assignment_id = data['assignment_id']
+    
+    # Get the question
+    question = Question.query.get(question_id)
+    if not question:
+        return jsonify({'error': 'Question not found'}), 404
     
     # Get the assignment to check due date
     assignment = Assignment.query.get_or_404(assignment_id)
@@ -459,11 +478,28 @@ def execute_query():
     if is_past_due:
         return jsonify({'error': 'This assignment has passed its due date. You can no longer execute queries or submit solutions.'}), 403
     
-    question = Question.query.get_or_404(question_id)
+    # For imported schemas, modify the query to use prefixed table names
+    if question.db_type == 'imported_schema':
+        table_prefix = question.get_table_prefix()
+        if table_prefix:
+            # Get all table names from the schema content
+            schema_content = question.schema_import.schema_content
+            table_names = []
+            for line in schema_content.split('\n'):
+                if 'CREATE TABLE' in line.upper():
+                    # Extract table name
+                    table_name = line[line.find('TABLE') + 5:].strip().split()[0].strip('`')
+                    table_names.append(table_name)
+            
+            # Replace table names with prefixed versions in the query
+            modified_query = query
+            for table_name in table_names:
+                modified_query = modified_query.replace(table_name, f"{table_prefix}{table_name}")
+            query = modified_query
     
     try:
         # Handle different database types
-        if question.db_type == 'mysql':
+        if question.uses_mysql():  # This covers both 'mysql' and 'imported_schema'
             try:
                 # Validate the query first
                 validate_student_query(query)
@@ -520,9 +556,9 @@ def execute_query():
                 return jsonify({'error': f'SQL Error: {clean_message}'}), 400
             except Exception as e:
                 print(f"MySQL query error: {str(e)}")
-                return jsonify({'error': f'{str(e.args[1])}'}), 400
+                return jsonify({'error': str(e)}), 400
             
-        else:
+        elif question.db_type == 'sqlite':
             # SQLite - Create a fresh in-memory database for each query execution
             try:
                 print(f"Creating fresh SQLite in-memory database for query execution")
@@ -616,6 +652,8 @@ def execute_query():
                     return jsonify({'error': 'Table Not Found: The table you referenced does not exist'}), 400
                 else:
                     return jsonify({'error': f'Database error: {error_msg}'}), 400
+        else:
+            return jsonify({'error': f'Unsupported database type: {question.db_type}'}), 400
     except Exception as e:
         print(f"Unexpected error in execute_query: {str(e)}")
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
@@ -643,7 +681,7 @@ def submit_answer():
     
     try:
         # Different handling based on database type
-        if question.db_type == 'mysql':
+        if question.uses_mysql():  # This covers both 'mysql' and 'imported_schema'
             try:
                 # Validate the query first
                 validate_student_query(query)
@@ -746,9 +784,9 @@ def submit_answer():
                 return jsonify({'error': str(e)}), 400
             except Exception as e:
                 print(f"MySQL grading error: {str(e)}")
-                return jsonify({'error': f'{str(e.args[1])}'}), 400
+                return jsonify({'error': str(e)}), 400
                 
-        else:
+        elif question.db_type == 'sqlite':
             # SQLite grading using SQLAlchemy
             try:
                 print(f"Grading SQLite query: student={query[:50]}..., teacher={question.correct_answer[:50]}...")
@@ -808,51 +846,53 @@ def submit_answer():
                                 feedback += f" Missing columns: {', '.join(missing)}."
                             if extra:
                                 feedback += f" Extra columns: {', '.join(extra)}."
-        
-                # Save submission
-                try:
-                    # Get existing submission if any
-                    submission = Submission.query.filter_by(
-                        question_id=question_id,
-                        student_id=current_user.id,
-                        assignment_id=assignment_id
-                    ).first()
                     
-                    if submission:
-                        # Update existing submission
-                        submission.submitted_answer = query
-                        submission.is_correct = is_correct
-                        submission.feedback = feedback
-                        submission.submitted_at = datetime.utcnow()
-                    else:
-                        # Create new submission
-                        submission = Submission(
-                            student_id=current_user.id,
+                    # Save submission
+                    try:
+                        # Get existing submission if any
+                        submission = Submission.query.filter_by(
                             question_id=question_id,
-                            assignment_id=assignment_id,
-                            submitted_answer=query,
-                            is_correct=is_correct,
-                            feedback=feedback
-                        )
-                        db.session.add(submission)
-                    
-                    db.session.commit()
-                    
-                    # Return response with success status
-                    return jsonify({
-                        'success': True,
-                        'is_correct': is_correct,
-                        'feedback': feedback
-                    })
-                    
-                except Exception as e:
-                    db.session.rollback()
-                    print(f"Database error when saving submission: {str(e)}")
-                    return jsonify({'error': f'Error saving your submission: {str(e)}'}), 500
-                    
+                            student_id=current_user.id,
+                            assignment_id=assignment_id
+                        ).first()
+                        
+                        if submission:
+                            # Update existing submission
+                            submission.submitted_answer = query
+                            submission.is_correct = is_correct
+                            submission.feedback = feedback
+                            submission.submitted_at = datetime.utcnow()
+                        else:
+                            # Create new submission
+                            submission = Submission(
+                                student_id=current_user.id,
+                                question_id=question_id,
+                                assignment_id=assignment_id,
+                                submitted_answer=query,
+                                is_correct=is_correct,
+                                feedback=feedback
+                            )
+                            db.session.add(submission)
+                        
+                        db.session.commit()
+                        
+                        # Return response with success status
+                        return jsonify({
+                            'success': True,
+                            'is_correct': is_correct,
+                            'feedback': feedback
+                        })
+                        
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"Database error when saving submission: {str(e)}")
+                        return jsonify({'error': f'Error saving your submission: {str(e)}'}), 500
+                        
             except Exception as e:
                 print(f"SQLite grading error: {str(e)}")
                 return jsonify({'error': f'Database error: {str(e)}'}), 400
+        else:
+            return jsonify({'error': f'Unsupported database type: {question.db_type}'}), 400
     
     except Exception as e:
         print(f"Unexpected error in submit_answer: {str(e)}")

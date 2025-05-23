@@ -1,14 +1,27 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, send_file, after_this_request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, send_file, after_this_request, abort
 from flask_login import current_user, login_required
+from functools import wraps
 from app import db
 from app.models import User, Question, Assignment, AssignmentQuestion, Submission, Section, SectionAssignment, StudentEnrollment
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import json
 import os
 from openpyxl.utils import get_column_letter
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
 import pymysql
+from app.models.schema_import import SchemaImport
+from sqlalchemy import create_engine, text
+from flask_wtf import CSRFProtect
+from app import login_manager, csrf
+
+def teacher_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_teacher():
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Configure allowed HTML tags and attributes for rich text editor
 ALLOWED_TAGS = [
@@ -85,91 +98,67 @@ def questions():
 
 @teacher.route('/question/new', methods=['GET', 'POST'])
 @login_required
+@teacher_required
 def new_question():
+    # Get all imported schemas for this teacher
+    schemas = SchemaImport.query.filter_by(created_by=current_user.id).order_by(SchemaImport.created_at.desc()).all()
+    
     if request.method == 'POST':
-        # Debug: Print form data to console
-        print("Form data received:")
-        for key, value in request.form.items():
-            print(f"{key}: {value}")
+        title = request.form.get('title')
+        description = sanitize_html(request.form.get('description'))
+        question_type = request.form.get('question_type')
+        difficulty = request.form.get('difficulty')
+        correct_answer = request.form.get('correct_answer')
+        db_type = request.form.get('db_type')
+        schema_import_id = request.form.get('schema_import_id')
+        disable_copy_paste = bool(request.form.get('disable_copy_paste'))
         
+        if not all([title, description, question_type, difficulty, correct_answer, db_type]):
+            flash('Please fill in all required fields.', 'danger')
+            return render_template('teacher/new_question.html', schemas=schemas)
+            
         try:
-            title = request.form.get('title')
-            description = sanitize_html(request.form.get('description'))
-            question_type = request.form.get('question_type')
-            difficulty = request.form.get('difficulty')
-            correct_answer = request.form.get('correct_answer')
-            db_type = request.form.get('db_type')
-            
-            # Validation
-            if not title or not description or not question_type or not difficulty or not correct_answer or not db_type:
-                flash('Please fill in all required fields.', 'danger')
-                return redirect(url_for('teacher.new_question'))
-            
-            # Different handling based on database type
-            if db_type == 'mysql':
-                mysql_db_name = request.form.get('mysql_db_name')
-                if not mysql_db_name:
-                    flash('MySQL database name is required when using MySQL.', 'danger')
-                    return redirect(url_for('teacher.new_question'))
-                    
-                sample_db_schema = None
-                
-                # Validate MySQL database connection
-                try:
-                    print(f"Attempting to connect to MySQL: {mysql_db_name}")
-                    
-                    # Try to connect to the database
-                    connection = pymysql.connect(
-                        host=os.environ.get('MYSQL_HOST', 'localhost'),
-                        user=os.environ.get('MYSQL_USER', 'root'),
-                        password=os.environ.get('MYSQL_PASSWORD', 'admin'),
-                        port=int(os.environ.get('MYSQL_PORT', 3306)),
-                        database=mysql_db_name
-                    )
-                    print("MySQL connection successful")
-                    connection.close()
-                except Exception as e:
-                    print(f"MySQL connection error: {str(e)}")
-                    flash(f'Could not connect to MySQL database: {str(e)}', 'danger')
-                    return redirect(url_for('teacher.new_question'))
-            else:
-                mysql_db_name = None
-                sample_db_schema = request.form.get('sample_db_schema')
-                
-                # Validate SQLite schema
-                if not sample_db_schema:
-                    flash('SQLite database schema is required when using the in-memory database option.', 'danger')
-                    return redirect(url_for('teacher.new_question'))
-            
-            # Create the question object
             question = Question(
                 title=title,
                 description=description,
                 question_type=question_type,
-                difficulty=int(difficulty),  # Ensure this is an integer
+                difficulty=int(difficulty),
                 correct_answer=correct_answer,
-                sample_db_schema=sample_db_schema,
                 db_type=db_type,
-                mysql_db_name=mysql_db_name,
                 author_id=current_user.id,
-                disable_copy_paste=bool(request.form.get('disable_copy_paste'))
+                disable_copy_paste=disable_copy_paste
             )
             
-            # Add and commit to the database
-            print("Adding question to database")
+            if db_type == 'imported_schema':
+                if not schema_import_id:
+                    flash('Please select an imported schema.', 'danger')
+                    return render_template('teacher/new_question.html', schemas=schemas)
+                question.schema_import_id = schema_import_id
+            elif db_type == 'mysql':
+                mysql_db_name = request.form.get('mysql_db_name')
+                if not mysql_db_name:
+                    flash('Please provide a MySQL database name.', 'danger')
+                    return render_template('teacher/new_question.html', schemas=schemas)
+                question.mysql_db_name = mysql_db_name
+            else:  # sqlite
+                sample_db_schema = request.form.get('sample_db_schema')
+                if not sample_db_schema:
+                    flash('Please provide a database schema.', 'danger')
+                    return render_template('teacher/new_question.html', schemas=schemas)
+                question.sample_db_schema = sample_db_schema
+            
             db.session.add(question)
             db.session.commit()
-            print(f"Question created with ID: {question.id}")
             
             flash('Question created successfully!', 'success')
             return redirect(url_for('teacher.questions'))
+            
         except Exception as e:
             db.session.rollback()
-            print(f"Error creating question: {str(e)}")
             flash(f'Error creating question: {str(e)}', 'danger')
-            return redirect(url_for('teacher.new_question'))
+            return render_template('teacher/new_question.html', schemas=schemas)
     
-    return render_template('teacher/new_question.html')
+    return render_template('teacher/new_question.html', schemas=schemas)
 
 @teacher.route('/question/<int:question_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -179,6 +168,9 @@ def edit_question(question_id):
     if question.author_id != current_user.id:
         flash('You can only edit your own questions.', 'danger')
         return redirect(url_for('teacher.questions'))
+    
+    # Get all imported schemas for this teacher
+    schemas = SchemaImport.query.filter_by(created_by=current_user.id).order_by(SchemaImport.created_at.desc()).all()
     
     if request.method == 'POST':
         try:
@@ -198,12 +190,26 @@ def edit_question(question_id):
             db_type = request.form.get('db_type')
             question.db_type = db_type
             
-            if db_type == 'mysql':
+            if db_type == 'imported_schema':
+                schema_import_id = request.form.get('schema_import_id')
+                if not schema_import_id:
+                    error_msg = 'Please select an imported schema.'
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({'success': False, 'error': error_msg})
+                    flash(error_msg, 'danger')
+                    return render_template('teacher/edit_question.html', question=question, schemas=schemas)
+                question.schema_import_id = schema_import_id
+                question.mysql_db_name = None
+                question.sample_db_schema = None
+            elif db_type == 'mysql':
                 mysql_db_name = request.form.get('mysql_db_name')
                 
                 if not mysql_db_name:
-                    flash('MySQL database name is required when using MySQL.', 'danger')
-                    return redirect(url_for('teacher.edit_question', question_id=question.id))
+                    error_msg = 'MySQL database name is required when using MySQL.'
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({'success': False, 'error': error_msg})
+                    flash(error_msg, 'danger')
+                    return render_template('teacher/edit_question.html', question=question, schemas=schemas)
                 
                 # Validate MySQL database connection
                 try:
@@ -222,34 +228,55 @@ def edit_question(question_id):
                     
                     question.mysql_db_name = mysql_db_name
                     question.sample_db_schema = None
+                    question.schema_import_id = None
                 except Exception as e:
+                    error_msg = f'Could not connect to MySQL database: {str(e)}'
                     print(f"MySQL connection error: {str(e)}")
-                    flash(f'Could not connect to MySQL database: {str(e)}', 'danger')
-                    return redirect(url_for('teacher.edit_question', question_id=question.id))
-            else:
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({'success': False, 'error': error_msg})
+                    flash(error_msg, 'danger')
+                    return render_template('teacher/edit_question.html', question=question, schemas=schemas)
+            else:  # sqlite
                 sample_db_schema = request.form.get('sample_db_schema')
                 
                 # Validate SQLite schema
                 if not sample_db_schema:
-                    flash('SQLite database schema is required when using the in-memory database option.', 'danger')
-                    return redirect(url_for('teacher.edit_question', question_id=question.id))
+                    error_msg = 'SQLite database schema is required when using the in-memory database option.'
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({'success': False, 'error': error_msg})
+                    flash(error_msg, 'danger')
+                    return render_template('teacher/edit_question.html', question=question, schemas=schemas)
                 
                 question.sample_db_schema = sample_db_schema
                 question.mysql_db_name = None
+                question.schema_import_id = None
             
             print("Saving question changes to database")
             db.session.commit()
             print(f"Question {question.id} updated successfully")
             
+            # Check if this is an AJAX request
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': True, 
+                    'message': 'Question updated successfully!'
+                })
+            
+            # Regular form submission
             flash('Question updated successfully!', 'success')
             return redirect(url_for('teacher.questions'))
         except Exception as e:
             db.session.rollback()
             print(f"Error updating question: {str(e)}")
+            
+            # Check if this is an AJAX request
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'error': str(e)})
+                
             flash(f'Error updating question: {str(e)}', 'danger')
-            return redirect(url_for('teacher.edit_question', question_id=question.id))
+            return render_template('teacher/edit_question.html', question=question, schemas=schemas)
     
-    return render_template('teacher/edit_question.html', question=question)
+    return render_template('teacher/edit_question.html', question=question, schemas=schemas)
 
 @teacher.route('/assignments')
 @login_required
@@ -1307,121 +1334,585 @@ def import_schema():
         # Get database name and prefix from form and environment
         base_name = request.form.get('db_name')
         prefix_type = request.form.get('prefix_type', 'none')  # none, assignment, or template
+        description = request.form.get('description', '')
         
         if not base_name:
             flash('Database name is required', 'danger')
             return redirect(url_for('teacher.import_schema'))
             
-        # Apply prefix if selected
-        if prefix_type == 'assignment':
-            db_name = f"{os.environ.get('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')}{base_name}"
-        elif prefix_type == 'template':
-            db_name = f"{os.environ.get('TEMPLATE_DB_PREFIX', 'template_assignment_')}{base_name}"
-        else:
-            db_name = base_name
-            
         # Get schema file
         if 'schema_file' not in request.files:
             flash('No file uploaded', 'danger')
             return redirect(url_for('teacher.import_schema'))
-            
+        
         file = request.files['schema_file']
         if file.filename == '':
             flash('No file selected', 'danger')
             return redirect(url_for('teacher.import_schema'))
-            
+        
         if not file.filename.endswith('.sql'):
             flash('Only .sql files are allowed', 'danger')
             return redirect(url_for('teacher.import_schema'))
-            
+        
         # Read and parse SQL file
         try:
             schema_content = file.read().decode('utf-8')
-            statements = [stmt.strip() for stmt in schema_content.split(';') if stmt.strip()]
-        except Exception as e:
-            flash(f'Error reading SQL file: {str(e)}', 'danger')
-            return redirect(url_for('teacher.import_schema'))
             
-        # Try to establish connection with increased timeout
-        try:
-            connection = pymysql.connect(
-                host=os.environ.get('MYSQL_HOST', 'localhost'),
-                user=os.environ.get('MYSQL_USER', 'root'),
-                password=os.environ.get('MYSQL_PASSWORD', 'admin'),
-                port=int(os.environ.get('MYSQL_PORT', 3306)),
-                connect_timeout=30,
-                read_timeout=30,
-                write_timeout=30
+            # Store the schema in the database
+            schema_import = SchemaImport(
+                name=base_name,
+                description=description,
+                schema_content=schema_content,
+                created_by=current_user.id,
+                is_template=(prefix_type == 'template')
             )
-        except pymysql.Error as e:
-            flash(f'Could not connect to MySQL server: {str(e)}', 'danger')
-            return redirect(url_for('teacher.import_schema'))
+            db.session.add(schema_import)
+            db.session.commit()
             
-        try:
-            with connection.cursor() as cursor:
-                # Drop database if it exists and create new one
-                cursor.execute(f"DROP DATABASE IF EXISTS {db_name}")
-                cursor.execute(f"CREATE DATABASE {db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-                cursor.execute(f"USE {db_name}")
-                
-                # Set session variables for better compatibility
-                cursor.execute("SET SESSION sql_mode = ''")
-                cursor.execute("SET foreign_key_checks = 0")
-                cursor.execute("SET unique_checks = 0")
-                cursor.execute("SET autocommit = 0")
-                
-                # First pass: Create tables without foreign keys
-                create_table_statements = []
-                other_statements = []
-                
-                for statement in statements:
-                    if statement.strip().upper().startswith('CREATE TABLE'):
-                        create_table_statements.append(statement)
-                    else:
-                        other_statements.append(statement)
-                
-                # Execute CREATE TABLE statements first
-                for statement in create_table_statements:
-                    try:
-                        cursor.execute(statement)
-                    except pymysql.Error as e:
-                        if "already exists" not in str(e).lower():
-                            print(f"Error creating table: {str(e)}")
-                            # Continue with other statements
-                
-                # Execute remaining statements
-                for statement in other_statements:
-                    try:
-                        cursor.execute(statement)
-                    except pymysql.Error as e:
-                        print(f"Error executing statement: {str(e)}")
-                        # Continue with other statements
-                
-                # Commit all changes
-                connection.commit()
-                
-                # Reset session variables
-                cursor.execute("SET foreign_key_checks = 1")
-                cursor.execute("SET unique_checks = 1")
-                cursor.execute("SET autocommit = 1")
-                
-                # Grant permissions to student user
-                cursor.execute(f"GRANT SELECT ON {db_name}.* TO 'sql_student'@'localhost'")
-                cursor.execute("FLUSH PRIVILEGES")
-                
-                flash(f'Successfully imported schema to database: {db_name}', 'success')
-                return redirect(url_for('teacher.import_schema'))
+            flash(f'Successfully imported schema: {base_name}', 'success')
+            return redirect(url_for('teacher.import_schema'))
                 
         except Exception as e:
             flash(f'Error importing schema: {str(e)}', 'danger')
             return redirect(url_for('teacher.import_schema'))
-        finally:
-            connection.close()
     
     # Get prefix information from environment for the template
     prefix_student = os.environ.get('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')
     prefix_template = os.environ.get('TEMPLATE_DB_PREFIX', 'template_assignment_')
     
+    # Get all imported schemas
+    schemas = SchemaImport.query.filter_by(created_by=current_user.id).order_by(SchemaImport.created_at.desc()).all()
+    
     return render_template('teacher/import_schema.html',
                          prefix_student=prefix_student,
-                         prefix_template=prefix_template) 
+                         prefix_template=prefix_template,
+                         schemas=schemas)
+
+@teacher.route('/schema/<int:schema_id>')
+@login_required
+@teacher_required
+def get_schema(schema_id):
+    schema = SchemaImport.query.get_or_404(schema_id)
+    if schema.created_by != current_user.id:
+        abort(403)
+    return jsonify({'content': schema.schema_content})
+
+@teacher.route('/schema/<int:schema_id>/use', methods=['POST'])
+@login_required
+@teacher_required
+def use_schema(schema_id):
+    schema = SchemaImport.query.get_or_404(schema_id)
+    if schema.created_by != current_user.id:
+        abort(403)
+        
+    try:
+        # Connect to the sql_classroom database
+        connection = pymysql.connect(
+            host=os.environ.get('MYSQL_HOST', 'localhost'),
+            user=os.environ.get('MYSQL_USER', 'root'),
+            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            database='sql_classroom',
+            connect_timeout=30
+        )
+        
+        with connection.cursor() as cursor:
+            # Generate a unique prefix for table names using the teacher's ID and schema ID
+            table_prefix = f"teacher_{current_user.id}_schema_{schema.id}_"
+            
+            # First, drop any existing tables with this prefix
+            cursor.execute("SHOW TABLES")
+            all_tables = [row[0] for row in cursor.fetchall()]
+            tables_to_drop = [table for table in all_tables if table.startswith(table_prefix)]
+            
+            for table in tables_to_drop:
+                cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
+            
+            # Parse and modify schema statements to add prefix to table names
+            statements = [stmt.strip() for stmt in schema.schema_content.split(';') if stmt.strip()]
+            created_tables = []
+            
+            # Execute statements with modified table names
+            for stmt in statements:
+                try:
+                    # Add prefix to CREATE TABLE statements
+                    if stmt.upper().strip().startswith('CREATE TABLE'):
+                        # Extract table name
+                        table_name = stmt[stmt.find('TABLE') + 5:].strip().split()[0].strip('`')
+                        prefixed_table = f"{table_prefix}{table_name}"
+                        # Replace table name with prefixed version
+                        modified_stmt = stmt.replace(f'TABLE {table_name}', f'TABLE `{prefixed_table}`')
+                        cursor.execute(modified_stmt)
+                        created_tables.append(prefixed_table)
+                    # Add prefix to other statements (INSERT, etc.)
+                    else:
+                        for table in all_tables:
+                            if table in stmt:
+                                modified_stmt = stmt.replace(table, f"`{table_prefix}{table}`")
+                                cursor.execute(modified_stmt)
+                except pymysql.Error as e:
+                    print(f"Error executing statement: {str(e)}")
+                    # Continue with other statements
+            
+            # Grant permissions to sql_student user for each created table
+            for table in created_tables:
+                try:
+                    grant_stmt = f"GRANT SELECT ON `sql_classroom`.`{table}` TO 'sql_student'@'localhost'"
+                    cursor.execute(grant_stmt)
+                except pymysql.Error as e:
+                    print(f"Error granting permissions for table {table}: {str(e)}")
+            
+            cursor.execute("FLUSH PRIVILEGES")
+            connection.commit()
+            
+            # Update the schema record with the table prefix
+            schema.active_schema_name = table_prefix
+            db.session.commit()
+            
+            return jsonify({
+                'success': True, 
+                'table_prefix': table_prefix,
+                'tables_created': created_tables
+            })
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    finally:
+        if connection:
+            connection.close()
+
+@teacher.route('/schema/<int:schema_id>/delete', methods=['GET'])
+@login_required
+@teacher_required
+def delete_schema(schema_id):
+    schema = SchemaImport.query.get_or_404(schema_id)
+    
+    # Check ownership
+    if schema.created_by != current_user.id:
+        flash('You can only delete your own imported schemas.', 'danger')
+        return redirect(url_for('teacher.import_schema'))
+    
+    try:
+        # Check if this schema is used in any questions
+        questions = Question.query.filter_by(schema_import_id=schema.id).all()
+        if questions:
+            # Get the question titles
+            question_titles = [q.title for q in questions]
+            flash(f'This schema cannot be deleted because it is used in the following questions: {", ".join(question_titles)}', 'danger')
+            return redirect(url_for('teacher.import_schema'))
+        
+        # Store the name for the success message
+        schema_name = schema.name
+        
+        # Delete the schema from MySQL if it exists
+        if schema.active_schema_name:
+            try:
+                connection = pymysql.connect(
+                    host=os.environ.get('MYSQL_HOST', 'localhost'),
+                    user=os.environ.get('MYSQL_USER', 'root'),
+                    password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                    port=int(os.environ.get('MYSQL_PORT', 3306)),
+                    connect_timeout=30
+                )
+                
+                with connection.cursor() as cursor:
+                    cursor.execute(f"DROP SCHEMA IF EXISTS {schema.active_schema_name}")
+                connection.close()
+            except Exception as e:
+                print(f"Error deleting MySQL schema: {str(e)}")
+                # Continue with deletion even if MySQL cleanup fails
+        
+        # Delete the schema record
+        db.session.delete(schema)
+        db.session.commit()
+        
+        flash(f'Schema "{schema_name}" has been successfully deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'An error occurred while deleting the schema: {str(e)}', 'danger')
+    
+    return redirect(url_for('teacher.import_schema'))
+
+@teacher.route('/api/preview-question', methods=['POST'])
+@login_required
+@csrf.exempt
+def preview_question():
+    """API endpoint to preview and test question execution for teachers."""
+    # Get JSON data from request
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Extract data from request
+    query = data.get('query', '').strip()
+    title = data.get('title', '')
+    description = data.get('description', '')
+    db_type = data.get('db_type', 'sqlite')
+    sample_db_schema = data.get('sample_db_schema', '')
+    mysql_db_name = data.get('mysql_db_name', '')
+    schema_import_id = data.get('schema_import_id')
+    correct_answer = data.get('correct_answer', '')
+    check_answer = data.get('check_answer', False)
+    
+    # Basic validation
+    if not query:
+        return jsonify({'error': 'Query is required'}), 400
+
+    # Initialize response
+    response_data = {
+        'query_result': None,
+        'answer_check': None
+    }
+    
+    # Create a temporary Question object for preview (not saved to database)
+    preview_question = Question(
+        title=title,
+        description=description,
+        db_type=db_type,
+        sample_db_schema=sample_db_schema,
+        mysql_db_name=mysql_db_name,
+        correct_answer=correct_answer,
+        author_id=current_user.id
+    )
+    
+    # Set schema import if applicable
+    if db_type == 'imported_schema' and schema_import_id:
+        try:
+            schema_import_id = int(schema_import_id)
+            schema_import = SchemaImport.query.get(schema_import_id)
+            if schema_import and schema_import.created_by == current_user.id:
+                preview_question.schema_import_id = schema_import_id
+                preview_question.schema_import = schema_import
+        except (ValueError, TypeError) as e:
+            return jsonify({'error': f'Invalid schema import ID: {str(e)}'}), 400
+    
+    try:
+        # Handle different database types
+        if db_type == 'mysql' or db_type == 'imported_schema':
+            try:
+                # Execute the query using a similar but simplified approach to student's route
+                if db_type == 'mysql':
+                    # Validate MySQL database connection
+                    if not mysql_db_name:
+                        return jsonify({'error': 'MySQL database name is required'}), 400
+                    
+                    # Try to connect to the database
+                    connection = pymysql.connect(
+                        host=os.environ.get('MYSQL_HOST', 'localhost'),
+                        user=os.environ.get('MYSQL_USER', 'root'),
+                        password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                        port=int(os.environ.get('MYSQL_PORT', 3306)),
+                        database=mysql_db_name,
+                        cursorclass=pymysql.cursors.DictCursor
+                    )
+                else:  # imported_schema
+                    if not preview_question.schema_import:
+                        return jsonify({'error': 'Invalid or missing schema import'}), 400
+                    
+                    # Get the actual database name from the schema import
+                    imported_schema_name = preview_question.schema_import.active_schema_name
+                    
+                    # Connect to SQL classroom database first
+                    connection = pymysql.connect(
+                        host=os.environ.get('MYSQL_HOST', 'localhost'),
+                        user=os.environ.get('MYSQL_USER', 'root'),
+                        password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                        port=int(os.environ.get('MYSQL_PORT', 3306)),
+                        database='sql_classroom',
+                        cursorclass=pymysql.cursors.DictCursor
+                    )
+                    
+                    # Modify query to use table prefixes if needed
+                    table_prefix = preview_question.get_table_prefix()
+                    if table_prefix:
+                        # Get all table names from the schema content
+                        schema_content = preview_question.schema_import.schema_content
+                        table_names = []
+                        for line in schema_content.split('\n'):
+                            if 'CREATE TABLE' in line.upper():
+                                # Extract table name
+                                table_name = line[line.find('TABLE') + 5:].strip().split()[0].strip('`')
+                                table_names.append(table_name)
+                        
+                        # Replace table names with prefixed versions in the query
+                        modified_query = query
+                        for table_name in table_names:
+                            modified_query = modified_query.replace(table_name, f"{table_prefix}{table_name}")
+                        query = modified_query
+                
+                # Execute query and fetch results
+                with connection.cursor() as cursor:
+                    # Execute the query
+                    cursor.execute(query)
+                    
+                    # Get results
+                    if cursor.description:
+                        data = cursor.fetchall()
+                        
+                        # Get column names from cursor description
+                        columns = [col[0] for col in cursor.description]
+                        
+                        # Convert dictionary data to lists for JSON response
+                        rows = []
+                        for row in data:
+                            # Convert any non-JSON serializable objects to strings
+                            serializable_row = {}
+                            for key, value in row.items():
+                                if isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                                    serializable_row[key] = value
+                                else:
+                                    serializable_row[key] = str(value)
+                            
+                            # Ensure values are in the same order as columns
+                            row_values = [serializable_row.get(col) for col in columns]
+                            rows.append(row_values)
+                    else:
+                        # For non-SELECT queries
+                        columns = ['Result']
+                        rows = [['Query executed successfully, but returned no rows.']]
+                
+                connection.close()
+                
+                # Set query result in response
+                response_data['query_result'] = {
+                    'columns': columns,
+                    'data': rows
+                }
+                
+            except pymysql.err.OperationalError as e:
+                error_code, error_message = e.args
+                return jsonify({'error': f'Database error: {error_message}'}), 400
+            except pymysql.err.ProgrammingError as e:
+                error_code, error_message = e.args
+                return jsonify({'error': f'SQL error: {error_message}'}), 400
+            except Exception as e:
+                return jsonify({'error': str(e)}), 400
+                
+        elif db_type == 'sqlite':
+            # Execute SQLite in-memory database query
+            if not sample_db_schema:
+                return jsonify({'error': 'SQLite schema is required'}), 400
+                
+            try:
+                # Create in-memory SQLite database
+                engine = create_engine('sqlite:///:memory:', 
+                                     connect_args={'check_same_thread': False})
+                
+                # Create a new connection and load the schema
+                with engine.connect() as conn:
+                    # Load schema
+                    schema_statements = sample_db_schema.split(';')
+                    trans = conn.begin()
+                    try:
+                        for statement in schema_statements:
+                            if statement.strip():
+                                conn.execute(text(statement))
+                        trans.commit()
+                    except Exception as e:
+                        trans.rollback()
+                        return jsonify({'error': f'Error in schema: {str(e)}'}), 400
+                
+                    # Execute the query
+                    result_proxy = conn.execute(text(query))
+                    
+                    # Get columns and data
+                    columns = list(result_proxy.keys())
+                    data = [list(row) for row in result_proxy]
+                    
+                    # Set query result in response
+                    response_data['query_result'] = {
+                        'columns': columns,
+                        'data': data
+                    }
+                    
+            except Exception as e:
+                return jsonify({'error': f'Error executing query: {str(e)}'}), 400
+        else:
+            return jsonify({'error': f'Unsupported database type: {db_type}'}), 400
+            
+        # If checking against correct answer
+        if check_answer and correct_answer:
+            # Create a simple check - just compare query results
+            correct_result = None
+            
+            # Execute the correct answer query and get its results
+            try:
+                if db_type == 'mysql' or db_type == 'imported_schema':
+                    # Re-establish connection
+                    if db_type == 'mysql':
+                        connection = pymysql.connect(
+                            host=os.environ.get('MYSQL_HOST', 'localhost'),
+                            user=os.environ.get('MYSQL_USER', 'root'),
+                            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                            port=int(os.environ.get('MYSQL_PORT', 3306)),
+                            database=mysql_db_name,
+                            cursorclass=pymysql.cursors.DictCursor
+                        )
+                    else:
+                        connection = pymysql.connect(
+                            host=os.environ.get('MYSQL_HOST', 'localhost'),
+                            user=os.environ.get('MYSQL_USER', 'root'),
+                            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                            port=int(os.environ.get('MYSQL_PORT', 3306)),
+                            database='sql_classroom',
+                            cursorclass=pymysql.cursors.DictCursor
+                        )
+                        
+                        # Apply table prefixes to correct answer if needed
+                        if table_prefix:
+                            modified_answer = correct_answer
+                            for table_name in table_names:
+                                modified_answer = modified_answer.replace(table_name, f"{table_prefix}{table_name}")
+                            correct_answer = modified_answer
+                    
+                    with connection.cursor() as cursor:
+                        cursor.execute(correct_answer)
+                        correct_data = cursor.fetchall()
+                        correct_columns = [col[0] for col in cursor.description]
+                        
+                        # Convert to list format for comparison
+                        correct_rows = []
+                        for row in correct_data:
+                            # Normalize data for comparison
+                            row_values = [row[col] if not isinstance(row[col], (datetime, date)) 
+                                         else str(row[col]) for col in correct_columns]
+                            correct_rows.append(row_values)
+                            
+                    connection.close()
+                    correct_result = {
+                        'columns': correct_columns,
+                        'data': correct_rows
+                    }
+                    
+                elif db_type == 'sqlite':
+                    # Create a new in-memory database for correct answer
+                    correct_engine = create_engine('sqlite:///:memory:',
+                                                  connect_args={'check_same_thread': False})
+                    
+                    with correct_engine.connect() as conn:
+                        # Load schema again
+                        schema_statements = sample_db_schema.split(';')
+                        trans = conn.begin()
+                        for statement in schema_statements:
+                            if statement.strip():
+                                conn.execute(text(statement))
+                        trans.commit()
+                        
+                        # Execute correct answer
+                        correct_result_proxy = conn.execute(text(correct_answer))
+                        correct_columns = list(correct_result_proxy.keys())
+                        correct_data = [list(row) for row in correct_result_proxy]
+                        
+                        correct_result = {
+                            'columns': correct_columns,
+                            'data': correct_data
+                        }
+                
+                # Compare results
+                user_data = response_data['query_result']['data']
+                correct_data = correct_result['data']
+                
+                # Normalize and compare row data
+                is_correct = False
+
+                def normalize_value(value):
+                    """Convert string representations of numbers back to numeric types for comparison"""
+                    if value is None:
+                        return None
+                    
+                    if isinstance(value, str):
+                        # Try to convert string to numeric types
+                        try:
+                            # Check if it's an integer
+                            if value.isdigit() or (value.startswith('-') and value[1:].isdigit()):
+                                return int(value)
+                            
+                            # Check if it's a float/decimal
+                            try:
+                                float_val = float(value)
+                                # Check if it's a string representation of a decimal
+                                if '.' in value:
+                                    # Keep it as float for comparison
+                                    return float_val
+                                return float_val
+                            except ValueError:
+                                pass
+                        except:
+                            # If conversion fails, keep as string
+                            pass
+                    
+                    return value
+
+                def normalize_row(row):
+                    """Normalize all values in a row for proper comparison"""
+                    return [normalize_value(cell) for cell in row]
+
+                def rows_equal(row1, row2):
+                    """Compare rows accounting for numeric equality"""
+                    if len(row1) != len(row2):
+                        return False
+                    
+                    for i in range(len(row1)):
+                        # Special comparison for floats - use approximate equality
+                        if isinstance(row1[i], float) or isinstance(row2[i], float):
+                            try:
+                                # Convert to float if possible
+                                val1 = float(row1[i]) if row1[i] is not None else None
+                                val2 = float(row2[i]) if row2[i] is not None else None
+                                
+                                # Check for None values
+                                if val1 is None or val2 is None:
+                                    if val1 != val2:
+                                        return False
+                                    continue
+                                
+                                # Use approximate equality for floats (handles precision differences)
+                                if abs(val1 - val2) > 0.0001:  # Small epsilon for float comparison
+                                    return False
+                            except (ValueError, TypeError):
+                                # If conversion fails, fall back to direct comparison
+                                if row1[i] != row2[i]:
+                                    return False
+                        else:
+                            # For non-float values, use direct comparison
+                            if row1[i] != row2[i]:
+                                return False
+                    
+                    return True
+
+                if len(user_data) == len(correct_data):
+                    if len(user_data) == 0:
+                        # Both returned empty result sets
+                        is_correct = True
+                    else:
+                        # Check if rows match (order matters for simplicity)
+                        is_correct = True
+                        
+                        # Normalize the data first
+                        normalized_user_data = [normalize_row(row) for row in user_data]
+                        normalized_correct_data = [normalize_row(row) for row in correct_data]
+                        
+                        for i in range(len(normalized_user_data)):
+                            if not rows_equal(normalized_user_data[i], normalized_correct_data[i]):
+                                is_correct = False
+                                break
+
+                feedback = "Your answer is correct!" if is_correct else "Your answer is incorrect. The expected results do not match your query output."
+                
+                # Add answer check to response
+                response_data['answer_check'] = {
+                    'is_correct': is_correct,
+                    'feedback': feedback
+                }
+                
+            except Exception as e:
+                # Add error feedback to response
+                response_data['answer_check'] = {
+                    'is_correct': False,
+                    'feedback': f"Error checking answer: {str(e)}"
+                }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
