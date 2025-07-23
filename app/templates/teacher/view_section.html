@@ -50,6 +50,14 @@
                         <span class="badge bg-primary rounded-pill">{{ assignments|length }}</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Assigned Database
+                        {% if section.database_name %}
+                            <span class="badge bg-success">{{ section.database_name }}</span>
+                        {% else %}
+                            <span class="text-muted">None assigned</span>
+                        {% endif %}
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
                         Created
                         <span>{{ section.created_at.strftime('%Y-%m-%d') }}</span>
                     </li>
@@ -100,7 +108,7 @@
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
-                                        <a href="{{ url_for('teacher.view_student', student_id=student.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <a href="{{ url_for('teacher.view_student', student_id=student.id) }}" class="btn btn-sm btn-outline-primary" target="_blank">
                                             <i class="fas fa-user me-1"></i> View Details
                                         </a>
                                         <button type="button" class="btn btn-sm btn-outline-danger remove-student-btn" 
@@ -129,9 +137,14 @@
 <div class="card shadow">
     <div class="card-header bg-light d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Assignments</h5>
-        <a href="{{ url_for('teacher.manage_section_assignments', section_id=section.id) }}" class="btn btn-sm btn-success">
-            <i class="fas fa-clipboard-list me-1"></i> Add/Remove Assignments
-        </a>
+        <div>
+            <a href="{{ url_for('teacher.export_section_results', section_id=section.id) }}" class="btn btn-sm btn-info me-2">
+                <i class="fas fa-file-export me-1"></i> Export All Results
+            </a>
+            <a href="{{ url_for('teacher.manage_section_assignments', section_id=section.id) }}" class="btn btn-sm btn-success">
+                <i class="fas fa-clipboard-list me-1"></i> Add/Remove Assignments
+            </a>
+        </div>
     </div>
     <div class="card-body">
         {% if assignments %}
@@ -142,6 +155,7 @@
                             <th>Title</th>
                             <th>Questions</th>
                             <th>Due Date</th>
+                            <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -158,9 +172,38 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="{{ url_for('teacher.view_assignment', assignment_id=assignment.id) }}" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-eye me-1"></i> View
-                                    </a>
+                                    {% if assignment_status[assignment.id] %}
+                                        <span class="badge bg-success">Enabled</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Disabled</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('teacher.view_assignment', assignment_id=assignment.id) }}" class="btn btn-sm btn-primary" target="_blank">
+                                            <i class="fas fa-eye me-1"></i> View
+                                        </a>
+                                        <a href="{{ url_for('teacher.export_assignment_results', section_id=section.id, assignment_id=assignment.id) }}" 
+                                           class="btn btn-sm btn-outline-info" title="Export Assignment Results">
+                                            <i class="fas fa-file-export me-1"></i> Export
+                                        </a>
+                                        <a href="{{ url_for('teacher.duplicate_section_assignment', section_id=section.id, assignment_id=assignment.id) }}"
+                                           class="btn btn-sm btn-outline-primary" title="Duplicate Assignment">
+                                            <i class="fas fa-copy me-1"></i> Duplicate
+                                        </a>
+                                        <form method="POST" action="{{ url_for('teacher.toggle_section_assignment_status', section_id=section.id, assignment_id=assignment.id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            {% if assignment_status[assignment.id] %}
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-ban me-1"></i> Disable
+                                                </button>
+                                            {% else %}
+                                                <button type="submit" class="btn btn-sm btn-outline-success">
+                                                    <i class="fas fa-check-circle me-1"></i> Enable
+                                                </button>
+                                            {% endif %}
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                         {% endfor %}

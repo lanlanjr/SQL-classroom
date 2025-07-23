@@ -8,6 +8,7 @@ class SectionAssignment(db.Model):
     section_id = db.Column(db.Integer, db.ForeignKey('sections.id'), nullable=False)
     assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id'), nullable=False)
     assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
     
     # Make sure each assignment is only assigned once to each section
     __table_args__ = (

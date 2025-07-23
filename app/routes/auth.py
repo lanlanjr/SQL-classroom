@@ -180,7 +180,7 @@ def register_with_token(token):
         return redirect(url_for('main.index'))
     
     # Debug output
-    print(f"Token received: '{token}'")
+    # print(f"Token received: '{token}'")
     
     # Find section by token
     section = Section.find_by_token(token)
@@ -258,7 +258,7 @@ def join_section_form():
 def join_section(token):
     """For existing users to join a section using a token"""
     # Debug output
-    print(f"Join section token received: '{token}'")
+    # print(f"Join section token received: '{token}'")
     
     if not current_user.is_authenticated:
         # Store the token in session and redirect to login

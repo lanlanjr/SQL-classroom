@@ -55,9 +55,15 @@
                             <li class="nav-item">
                                 <a class="nav-link px-3 {% if request.endpoint == 'teacher.students' %}active{% endif %}" href="{{ url_for('teacher.students') }}">Students</a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link px-3 {% if request.endpoint == 'teacher.sql_playground' %}active{% endif %}" href="{{ url_for('teacher.sql_playground') }}">SQL Playground</a>
+                            </li>
                         {% else %}
                             <li class="nav-item">
                                 <a class="nav-link px-3 {% if request.endpoint == 'student.dashboard' %}active{% endif %}" href="{{ url_for('student.dashboard') }}">Dashboard</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link px-3 {% if request.endpoint == 'student.sql_playground' %}active{% endif %}" href="{{ url_for('student.sql_playground') }}">SQL Playground</a>
                             </li>
                             {% if active_sections|default([])|length > 1 %}
                             <li class="nav-item dropdown">

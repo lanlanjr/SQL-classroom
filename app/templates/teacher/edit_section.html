@@ -32,6 +32,23 @@
                 <div class="form-text">Additional information about this section (optional).</div>
             </div>
             
+            <div class="mb-3">
+                <label for="database_name" class="form-label">Assigned Database</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="database_name" name="database_name" 
+                           value="{{ section.database_name or '' }}"
+                           placeholder="Enter database name for this section" list="database-list">
+                    <datalist id="database-list"></datalist>
+                    <button type="button" class="btn btn-outline-secondary" id="refresh-databases">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="form-text">
+                    Specify the database that students in this section will use in the SQL playground. 
+                    Leave empty if you want students to choose their own database.
+                </div>
+            </div>
+            
             <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                 <a href="{{ url_for('teacher.view_section', section_id=section.id) }}" class="btn btn-outline-secondary me-2">
                     Cancel
@@ -43,4 +60,45 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const databaseInput = document.getElementById('database_name');
+    const refreshDatabasesBtn = document.getElementById('refresh-databases');
+    const databaseList = document.getElementById('database-list');
+    
+    // Load available databases
+    function loadDatabases() {
+        fetch('{{ url_for("teacher.get_available_databases") }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                // Clear existing options
+                databaseList.innerHTML = '';
+                
+                // Add options for each database
+                data.databases.forEach(db => {
+                    const option = document.createElement('option');
+                    option.value = db;
+                    databaseList.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading databases:', error);
+            });
+    }
+    
+    // Load databases on page load
+    loadDatabases();
+    
+    // Refresh databases button handler
+    refreshDatabasesBtn.addEventListener('click', loadDatabases);
+});
+</script>
 {% endblock %} 

@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import current_user, login_required
 from app import db, csrf
-from app.models import User, Question, Assignment, AssignmentQuestion, Submission, Section, SectionAssignment
+from app.models import User, Question, Assignment, AssignmentQuestion, Submission, Section, SectionAssignment, StudentEnrollment
 from sqlalchemy import text, create_engine
 from datetime import datetime
 import sqlite3
@@ -45,6 +45,20 @@ def dashboard():
     current_section_id = session.get('current_section_id')
     current_section = None
     
+    # Check if the student is still enrolled in the current section
+    if current_section_id:
+        # First, verify the student is still enrolled in this section
+        enrollment = StudentEnrollment.query.filter_by(
+            student_id=current_user.id,
+            section_id=current_section_id,
+            is_active=True
+        ).first()
+        
+        if not enrollment:
+            # Student was removed from this section, clear from session
+            session.pop('current_section_id', None)
+            current_section_id = None
+    
     # If specified section ID exists and student is enrolled in it, use that
     if current_section_id:
         for section in active_sections:
@@ -60,8 +74,8 @@ def dashboard():
     # Get the teacher for the current section
     teacher = User.query.get(current_section.creator_id) if current_section else None
     
-    # Get all assignments for this student's current section
-    section_assignments = SectionAssignment.query.filter_by(section_id=current_section.id).all()
+    # Get all assignments for this student's current section that are active
+    section_assignments = SectionAssignment.query.filter_by(section_id=current_section.id, is_active=True).all()
     assignment_ids = [sa.assignment_id for sa in section_assignments]
     
     # Make sure assignments have questions
@@ -154,13 +168,26 @@ def view_assignment(assignment_id):
     # If no current section or not valid, use first active section
     current_section = None
     if current_section_id:
+        # First, verify the student is still enrolled in this section
+        enrollment = StudentEnrollment.query.filter_by(
+            student_id=current_user.id,
+            section_id=current_section_id,
+            is_active=True
+        ).first()
+        
+        if not enrollment:
+            # Student was removed from this section, redirect to dashboard
+            flash('You are no longer enrolled in the section you were viewing.', 'warning')
+            session.pop('current_section_id', None)
+            return redirect(url_for('student.dashboard'))
+            
         current_section = next((s for s in active_sections if s.id == current_section_id), None)
     
     if not current_section:
         current_section = active_sections[0]
         session['current_section_id'] = current_section.id
     
-    # Check if this assignment is assigned to the student's current section
+    # Check if this assignment is assigned to the student's current section and is active
     section_assignment = SectionAssignment.query.filter_by(
         section_id=current_section.id,
         assignment_id=assignment.id
@@ -168,6 +195,11 @@ def view_assignment(assignment_id):
     
     if not section_assignment:
         flash('This assignment is not available for your current classroom.', 'danger')
+        return redirect(url_for('student.dashboard'))
+    
+    # Check if the assignment is active
+    if not section_assignment.is_active:
+        flash('This assignment has been disabled by your teacher.', 'danger')
         return redirect(url_for('student.dashboard'))
     
     # Get current time for checking due dates
@@ -275,6 +307,19 @@ def view_question(question_id):
     # If no current section or not valid, use first active section
     current_section = None
     if current_section_id:
+        # First, verify the student is still enrolled in this section
+        enrollment = StudentEnrollment.query.filter_by(
+            student_id=current_user.id,
+            section_id=current_section_id,
+            is_active=True
+        ).first()
+        
+        if not enrollment:
+            # Student was removed from this section, redirect to dashboard
+            flash('You are no longer enrolled in the section you were viewing.', 'warning')
+            session.pop('current_section_id', None)
+            return redirect(url_for('student.dashboard'))
+            
         current_section = next((s for s in active_sections if s.id == current_section_id), None)
     
     if not current_section:
@@ -429,7 +474,7 @@ def validate_student_query(query):
         'LOAD', 'CALL', 'LOCK', 'UNLOCK',
         'INTO OUTFILE', 'INTO DUMPFILE',  # Prevent file operations
         'INFORMATION_SCHEMA', 'PERFORMANCE_SCHEMA',  # Restrict access to system schemas
-        'UNION', 'UNION ALL'  # Prevent UNION attacks
+        # 'UNION', 'UNION ALL'  # Prevent UNION attacks
     ]
     
     # Split query into words and check for forbidden keywords
@@ -898,6 +943,150 @@ def submit_answer():
         print(f"Unexpected error in submit_answer: {str(e)}")
         return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
+@student.route('/api/check-assignment-status/<int:assignment_id>', methods=['GET'])
+@login_required
+def check_assignment_status(assignment_id):
+    """Check if an assignment is still active for the current section."""
+    # Get current section from session
+    current_section_id = session.get('current_section_id')
+    
+    # If no section ID in session, assignment is inaccessible
+    if not current_section_id:
+        return jsonify({'active': False, 'message': 'No active section'})
+    
+    # Check if assignment exists and is active
+    section_assignment = SectionAssignment.query.filter_by(
+        section_id=current_section_id,
+        assignment_id=assignment_id
+    ).first()
+    
+    if not section_assignment:
+        return jsonify({'active': False, 'message': 'Assignment not found for this section'})
+    
+    # Check if the assignment is still active
+    if not section_assignment.is_active:
+        return jsonify({'active': False, 'message': 'Assignment has been disabled by your teacher'})
+    
+    # Check if assignment is past due
+    assignment = Assignment.query.get_or_404(assignment_id)
+    now = datetime.now()
+    if assignment.due_date and assignment.due_date < now:
+        return jsonify({'active': False, 'message': 'Assignment has passed its due date'})
+    
+    return jsonify({'active': True})
+
+@student.route('/api/active-assignments', methods=['GET'])
+@login_required
+def get_active_assignments():
+    """Get all active assignments for the student's current section."""
+    # Get current section from session
+    current_section_id = session.get('current_section_id')
+    
+    # If no section ID in session, return empty list
+    if not current_section_id:
+        return jsonify({'assignments': [], 'stats': {}, 'message': 'No active section', 'now': datetime.now().isoformat()})
+    
+    try:
+        # First, check if the student is still enrolled in this section
+        enrollment = StudentEnrollment.query.filter_by(
+            student_id=current_user.id,
+            section_id=current_section_id,
+            is_active=True
+        ).first()
+        
+        if not enrollment:
+            # Student has been removed from this section, clear the session
+            session.pop('current_section_id', None)
+            
+            # Try to find another active section for this student
+            active_sections = current_user.get_active_sections()
+            if active_sections:
+                # Set the first available active section as current
+                session['current_section_id'] = active_sections[0].id
+                current_section_id = active_sections[0].id
+            else:
+                # No active sections available
+                return jsonify({'assignments': [], 'stats': {}, 'message': 'No active section', 'now': datetime.now().isoformat()})
+        
+        # Get all active assignments for this section
+        section_assignments = SectionAssignment.query.filter_by(
+            section_id=current_section_id, 
+            is_active=True
+        ).all()
+        
+        assignment_ids = [sa.assignment_id for sa in section_assignments]
+        
+        # Make sure assignments have questions
+        valid_assignment_ids = db.session.query(AssignmentQuestion.assignment_id)\
+            .filter(AssignmentQuestion.assignment_id.in_(assignment_ids))\
+            .distinct() if assignment_ids else []
+        
+        # Get the assignments
+        if not assignment_ids:
+            return jsonify({'assignments': [], 'stats': {}, 'now': datetime.now().isoformat()})
+            
+        assignments = Assignment.query.filter(Assignment.id.in_(valid_assignment_ids)).all()
+        
+        # Collect all necessary data for frontend rendering
+        assignment_data = []
+        assignment_stats = {}
+        
+        for assignment in assignments:
+            # Find all questions in the assignment
+            assignment_questions = AssignmentQuestion.query.filter_by(assignment_id=assignment.id).all()
+            question_count = len(assignment_questions)
+            question_ids = [aq.question_id for aq in assignment_questions]
+            
+            # Find all submissions by this student for this assignment
+            submissions = Submission.query.filter_by(
+                student_id=current_user.id, 
+                assignment_id=assignment.id
+            ).all()
+            
+            # Only count submissions for questions that are still part of the assignment
+            valid_submissions = [s for s in submissions if s.question_id in question_ids]
+            
+            # For each question, keep only the most recent submission
+            latest_submissions_by_question = {}
+            for submission in valid_submissions:
+                question_id = submission.question_id
+                if question_id not in latest_submissions_by_question or submission.submitted_at > latest_submissions_by_question[question_id].submitted_at:
+                    latest_submissions_by_question[question_id] = submission
+            
+            # Get unique questions that have been submitted with the latest submission
+            submitted_question_ids = set(latest_submissions_by_question.keys())
+            
+            # Count correct submissions
+            correct_count = sum(1 for s in latest_submissions_by_question.values() if s.is_correct)
+            
+            # Store the stats
+            stats = {
+                'question_count': question_count,
+                'submitted_count': len(submitted_question_ids),
+                'correct_count': correct_count
+            }
+            
+            # Add to results
+            assignment_stats[assignment.id] = stats
+            
+            # Format assignment data
+            assignment_data.append({
+                'id': assignment.id,
+                'title': assignment.title,
+                'due_date': assignment.due_date.isoformat() if assignment.due_date else None,
+                'question_count': question_count
+            })
+        
+        return jsonify({
+            'assignments': assignment_data,
+            'stats': assignment_stats,
+            'now': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        print(f"Error fetching active assignments: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @student.route('/switch_section/<int:section_id>')
 @login_required
 def switch_section(section_id):
@@ -918,3 +1107,164 @@ def switch_section(section_id):
     flash(f'Switched to {section.name}', 'success')
     
     return redirect(url_for('student.dashboard')) 
+
+@student.route('/sql-playground', methods=['GET'])
+@login_required
+def sql_playground():
+    """Display the SQL Playground page where students can practice SQL queries."""
+    # Get current section from session or active sections
+    current_section_id = session.get('current_section_id')
+    active_sections = current_user.get_active_sections()
+    
+    if not active_sections:
+        flash('You are not enrolled in any classroom yet. Please contact your teacher.', 'warning')
+        return redirect(url_for('student.dashboard'))
+    
+    # If no current section or not valid, use first active section
+    current_section = None
+    if current_section_id:
+        # First, verify the student is still enrolled in this section
+        enrollment = StudentEnrollment.query.filter_by(
+            student_id=current_user.id,
+            section_id=current_section_id,
+            is_active=True
+        ).first()
+        
+        if not enrollment:
+            # Student was removed from this section, redirect to dashboard
+            flash('You are no longer enrolled in the section you were viewing.', 'warning')
+            session.pop('current_section_id', None)
+            return redirect(url_for('student.dashboard'))
+            
+        current_section = next((s for s in active_sections if s.id == current_section_id), None)
+    
+    if not current_section:
+        current_section = active_sections[0]
+        session['current_section_id'] = current_section.id
+    
+    return render_template(
+        'student/sql_playground.html',
+        section=current_section,
+        active_sections=active_sections
+    )
+
+@student.route('/api/playground-execute', methods=['POST'])
+@login_required
+@csrf.exempt
+def playground_execute():
+    """API endpoint to execute SQL queries in the playground."""
+    data = request.json
+    if not data or 'query' not in data or 'database_name' not in data:
+        return jsonify({'error': 'Missing required parameters'}), 400
+    
+    query = data['query'].strip()
+    database_name = data['database_name'].strip()
+    
+    try:
+        # Validate the query for security
+        validate_student_query(query)
+        
+        try:
+            # Connect to MySQL using the provided database name
+            conn = pymysql.connect(
+                host=os.environ.get('MYSQL_HOST', 'localhost'),
+                user=os.environ.get('MYSQL_USER', 'root'),
+                password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                port=int(os.environ.get('MYSQL_PORT', 3306)),
+                database=database_name,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            
+            # Execute query and fetch results
+            with conn.cursor() as cursor:
+                # Execute the query
+                cursor.execute(query)
+                
+                # Check if this is a SELECT query by looking for a result set
+                if cursor.description:
+                    # For SELECT queries, get the results
+                    data = cursor.fetchall()
+                    
+                    # Get column names directly from cursor description
+                    columns = [col[0] for col in cursor.description]
+                    
+                    # Convert dictionary data to lists for JSON response
+                    rows = []
+                    for row in data:
+                        # Convert any non-JSON serializable objects to strings
+                        serializable_row = {}
+                        for key, value in row.items():
+                            if isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                                serializable_row[key] = value
+                            else:
+                                serializable_row[key] = str(value)
+                        
+                        # Ensure values are in the same order as columns
+                        row_values = [serializable_row.get(col) for col in columns]
+                        rows.append(row_values)
+                    
+                    result = {
+                        'columns': columns,
+                        'data': rows
+                    }
+                else:
+                    # This shouldn't happen due to validation, but just in case
+                    return jsonify({'error': 'Only SELECT queries are allowed'}), 400
+            
+            conn.close()
+            return jsonify(result)
+            
+        except pymysql.err.OperationalError as e:
+            error_code, error_message = e.args
+            if error_code == 1049:  # Unknown database
+                return jsonify({'error': f'Database "{database_name}" does not exist'}), 404
+            elif error_code == 1045:  # Access denied
+                return jsonify({'error': 'Access denied. Check your database credentials.'}), 403
+            clean_message = error_message.replace('\n', ' ')
+            return jsonify({'error': f'Database Error: {clean_message}'}), 400
+        except pymysql.err.ProgrammingError as e:
+            error_code, error_message = e.args
+            clean_message = error_message.replace('\n', ' ')
+            return jsonify({'error': f'SQL Error: {clean_message}'}), 400
+        except Exception as e:
+            print(f"MySQL query error: {str(e)}")
+            return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
+            
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f"Unexpected error in playground_execute: {str(e)}")
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500 
+
+@student.route('/api/get-available-databases', methods=['GET'])
+@login_required
+def get_available_databases():
+    """API endpoint to get a list of available MySQL databases."""
+    try:
+        # Connect to MySQL using root credentials
+        conn = pymysql.connect(
+            host=os.environ.get('MYSQL_HOST', 'localhost'),
+            user=os.environ.get('MYSQL_USER', 'root'),
+            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        
+        # Execute query to get databases
+        with conn.cursor() as cursor:
+            cursor.execute("SHOW DATABASES")
+            all_databases = [db['Database'] for db in cursor.fetchall()]
+            
+            # Filter out system databases that students shouldn't access
+            system_dbs = ['information_schema', 'mysql', 'performance_schema', 'sys']
+            user_databases = [db for db in all_databases if db not in system_dbs]
+            
+            # Sort alphabetically
+            user_databases.sort()
+        
+        conn.close()
+        return jsonify({'databases': user_databases})
+        
+    except Exception as e:
+        print(f"Error fetching databases: {str(e)}")
+        return jsonify({'error': str(e), 'databases': []}), 500 

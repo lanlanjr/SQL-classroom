@@ -41,7 +41,7 @@
                 <h5 class="card-title">Your Classroom</h5>
                 <p class="mb-0">
                     {% if section %}
-                        <i class="fas fa-university me-2"></i> {{ section.name }}
+                        <i class="fas fa-university me-2"></i> {{ section.name }} - {{ section.description }}
                         {% if teacher %}
                             <br><small class="text-muted mt-1"><i class="fas fa-chalkboard-teacher me-2"></i> Teacher: {{ teacher.full_name }}</small>
                         {% endif %}
@@ -56,7 +56,7 @@
         <div class="card shadow">
             <div class="card-body">
                 <h5 class="card-title">Assignment Progress</h5>
-                <p class="mb-0"><i class="fas fa-tasks me-2"></i> {{ completed_assignments }} / {{ assignments|length }} complete</p>
+                <p class="mb-0" id="assignment-progress"><i class="fas fa-tasks me-2"></i> {{ completed_assignments }} / {{ assignments|length }} complete</p>
             </div>
         </div>
     </div>
@@ -67,94 +67,352 @@
                 <a href="{{ url_for('auth.join_section_form') }}" class="btn btn-sm btn-primary">
                     <i class="fas fa-plus-circle me-1"></i> Join New Classroom
                 </a>
+                <a href="{{ url_for('student.sql_playground') }}" class="btn btn-sm btn-success ms-1">
+                    <i class="fas fa-database me-1"></i> SQL Playground
+                </a>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Assignments -->
-{% if assignments %}
-<div class="card shadow mb-4">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Your Assignments</h5>
-    </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Assignment</th>
-                        <th>Progress</th>
-                        <th>Due Date</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for assignment in assignments %}
-                        {% set stats = assignment_stats[assignment.id] %}
-                        {% set progress = (stats.submitted_count / stats.question_count * 100)|int if stats.question_count > 0 else 0 %}
-                        {% set is_past_due = assignment.due_date and assignment.due_date < now %}
+<div id="assignments-container">
+    {% if assignments %}
+    <div class="card shadow mb-4">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Your Assignments</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <td>{{ assignment.title }}</td>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <div class="progress flex-grow-1 me-2" style="height: 10px;">
-                                        <div class="progress-bar {% if progress == 100 %}bg-success{% else %}bg-primary{% endif %}" 
-                                             role="progressbar" 
-                                             style="width: {{ progress }}%;" 
-                                             aria-valuenow="{{ progress }}" 
-                                             aria-valuemin="0" 
-                                             aria-valuemax="100"></div>
-                                    </div>
-                                    <span class="small text-muted">{{ stats.submitted_count }}/{{ stats.question_count }}</span>
-                                </div>
-                            </td>
-                            <td>
-                                {% if assignment.due_date %}
-                                    {{ assignment.due_date.strftime('%Y-%m-%d %I:%M %p') }}
-                                    {% if is_past_due %}
-                                        <span class="badge bg-danger ms-1">Past Due</span>
-                                    {% endif %}
-                                {% else %}
-                                    <span class="text-muted">No Due Date</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if stats.submitted_count == 0 %}
-                                    <span class="badge bg-secondary">Not Started</span>
-                                {% elif stats.submitted_count == stats.question_count %}
-                                    <span class="badge bg-success">Completed</span>
-                                {% else %}
-                                    <span class="badge bg-warning">In Progress</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if not is_past_due %}
-                                    <div class="btn-group" role="group">
-                                        <a href="{{ url_for('student.view_assignment', assignment_id=assignment.id) }}" class="btn btn-sm btn-primary">
-                                            <i class="fas fa-eye"></i> View
-                                        </a>
-                                    </div>
-                                {% else %}
-                                    <span class="text-muted">Closed</span>
-                                {% endif %}
-                            </td>
+                            <th>Assignment</th>
+                            <th>Progress</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody id="assignments-table-body">
+                        {% for assignment in assignments %}
+                            {% set stats = assignment_stats[assignment.id] %}
+                            {% set progress = (stats.submitted_count / stats.question_count * 100)|int if stats.question_count > 0 else 0 %}
+                            {% set is_past_due = assignment.due_date and assignment.due_date < now %}
+                            <tr data-assignment-id="{{ assignment.id }}">
+                                <td>{{ assignment.title }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 10px;">
+                                            <div class="progress-bar {% if progress == 100 %}bg-success{% else %}bg-primary{% endif %}" 
+                                                 role="progressbar" 
+                                                 style="width: {{ progress }}%;" 
+                                                 aria-valuenow="{{ progress }}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100"></div>
+                                        </div>
+                                        <span class="small text-muted">{{ stats.submitted_count }}/{{ stats.question_count }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if assignment.due_date %}
+                                        {{ assignment.due_date.strftime('%Y-%m-%d %I:%M %p') }}
+                                        {% if is_past_due %}
+                                            <span class="badge bg-danger ms-1">Past Due</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">No Due Date</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if stats.submitted_count == 0 %}
+                                        <span class="badge bg-secondary">Not Started</span>
+                                    {% elif stats.submitted_count == stats.question_count %}
+                                        <span class="badge bg-success">Completed</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">In Progress</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not is_past_due %}
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('student.view_assignment', assignment_id=assignment.id) }}" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-eye"></i> View
+                                            </a>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">Closed</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-</div>
-{% else %}
-<div class="alert alert-info mt-4">
-    <i class="fas fa-info-circle me-2"></i> 
-    {% if section %}
-        No assignments have been assigned to your classroom.
     {% else %}
-        You are not enrolled in any classroom yet. Please join a classroom to see assignments.
+    <div class="alert alert-info mt-4">
+        <i class="fas fa-info-circle me-2"></i> 
+        {% if section %}
+            No assignments have been assigned to your classroom.
+        {% else %}
+            You are not enrolled in any classroom yet. Please join a classroom to see assignments.
+        {% endif %}
+    </div>
     {% endif %}
 </div>
-{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Function to format date from ISO string
+    function formatDate(dateString) {
+        if (!dateString) return '<span class="text-muted">No Due Date</span>';
+        
+        const date = new Date(dateString);
+        const now = new Date();
+        const isPastDue = date < now;
+        
+        // Format date string as YYYY-MM-DD hh:mm AM/PM
+        const options = { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit',
+            hour: '2-digit', 
+            minute: '2-digit'
+        };
+        const formattedDate = date.toLocaleString('en-US', options);
+        
+        if (isPastDue) {
+            return formattedDate + ' <span class="badge bg-danger ms-1">Past Due</span>';
+        }
+        
+        return formattedDate;
+    }
+    
+    // Function to check for active assignments and update the dashboard
+    function checkActiveAssignments() {
+        fetch('{{ url_for('student.get_active_assignments') }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                // Handle the case where student has been removed from section
+                if (data.message === 'No active section') {
+                    const assignmentsContainer = document.getElementById('assignments-container');
+                    assignmentsContainer.innerHTML = `
+                        <div class="alert alert-info mt-4">
+                            <i class="fas fa-info-circle me-2"></i> 
+                            You are not enrolled in any classroom yet. Please join a classroom to see assignments.
+                        </div>
+                    `;
+                    
+                    // Update assignment progress counter to show 0/0
+                    document.getElementById('assignment-progress').innerHTML = 
+                        `<i class="fas fa-tasks me-2"></i> 0 / 0 complete`;
+                    
+                    // Also check if we need to update classroom info
+                    const cardTitles = document.querySelectorAll('.card-title');
+                    for (let i = 0; i < cardTitles.length; i++) {
+                        if (cardTitles[i].textContent === 'Your Classroom') {
+                            const classroomInfo = cardTitles[i].closest('.card-body');
+                            if (classroomInfo) {
+                                classroomInfo.innerHTML = `
+                                    <h5 class="card-title">Your Classroom</h5>
+                                    <p class="mb-0">
+                                        <span class="text-muted">Not enrolled in any classroom</span>
+                                    </p>
+                                `;
+                            }
+                            break;
+                        }
+                    }
+                    
+                    // Update classroom dropdown if it exists
+                    const classroomDropdown = document.getElementById('classroomDropdown');
+                    if (classroomDropdown) {
+                        classroomDropdown.textContent = 'Select Classroom';
+                        
+                        // Clear any existing dropdown menu items
+                        const dropdownMenu = classroomDropdown.nextElementSibling;
+                        if (dropdownMenu) {
+                            // Keep only the "Join New Classroom" option
+                            const joinNewOption = dropdownMenu.querySelector('a[href*="join_section"]');
+                            if (joinNewOption) {
+                                const divider = document.createElement('li');
+                                divider.innerHTML = '<hr class="dropdown-divider">';
+                                
+                                dropdownMenu.innerHTML = '';
+                                dropdownMenu.appendChild(divider);
+                                dropdownMenu.appendChild(joinNewOption.parentElement);
+                            }
+                        }
+                    }
+                    
+                    return;
+                }
+                
+                const assignments = data.assignments;
+                const stats = data.stats;
+                const currentAssignments = [];
+                
+                // Update the assignments container
+                const assignmentsContainer = document.getElementById('assignments-container');
+                const assignmentsTableBody = document.getElementById('assignments-table-body');
+                
+                // Count completed assignments
+                let completedCount = 0;
+                
+                if (assignments.length > 0) {
+                    // Create new HTML content for each assignment
+                    let newContent = '';
+                    
+                    assignments.forEach(assignment => {
+                        // Get stats for this assignment
+                        const assignmentStats = stats[assignment.id] || { question_count: 0, submitted_count: 0 };
+                        const progress = assignmentStats.question_count > 0 ? 
+                            Math.floor(assignmentStats.submitted_count / assignmentStats.question_count * 100) : 0;
+                            
+                        const isPastDue = assignment.due_date && new Date(assignment.due_date) < new Date(data.now);
+                        
+                        // Add assignment ID to current list
+                        currentAssignments.push(assignment.id);
+                        
+                        // Determine status
+                        let status = '<span class="badge bg-secondary">Not Started</span>';
+                        if (assignmentStats.submitted_count > 0) {
+                            if (assignmentStats.submitted_count === assignmentStats.question_count) {
+                                status = '<span class="badge bg-success">Completed</span>';
+                                completedCount++;
+                            } else {
+                                status = '<span class="badge bg-warning">In Progress</span>';
+                            }
+                        }
+                        
+                        // Create row HTML
+                        newContent += `
+                            <tr data-assignment-id="${assignment.id}">
+                                <td>${assignment.title}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 10px;">
+                                            <div class="progress-bar ${progress === 100 ? 'bg-success' : 'bg-primary'}" 
+                                                 role="progressbar" 
+                                                 style="width: ${progress}%;" 
+                                                 aria-valuenow="${progress}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100"></div>
+                                        </div>
+                                        <span class="small text-muted">${assignmentStats.submitted_count}/${assignmentStats.question_count}</span>
+                                    </div>
+                                </td>
+                                <td>${formatDate(assignment.due_date)}</td>
+                                <td>${status}</td>
+                                <td>
+                                    ${!isPastDue ? 
+                                    `<div class="btn-group" role="group">
+                                        <a href="/student/assignment/${assignment.id}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                    </div>` : 
+                                    `<span class="text-muted">Closed</span>`}
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    // Check if the assignment table exists, if not create it
+                    if (assignmentsContainer.querySelector('.card') === null) {
+                        assignmentsContainer.innerHTML = `
+                            <div class="card shadow mb-4">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">Your Assignments</h5>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Assignment</th>
+                                                    <th>Progress</th>
+                                                    <th>Due Date</th>
+                                                    <th>Status</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="assignments-table-body">
+                                                ${newContent}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // Just update the table body
+                        assignmentsTableBody.innerHTML = newContent;
+                    }
+                    
+                    // Remove any assignments that are no longer active
+                    const existingRows = assignmentsTableBody.querySelectorAll('tr[data-assignment-id]');
+                    existingRows.forEach(row => {
+                        const assignmentId = parseInt(row.dataset.assignmentId, 10);
+                        if (!currentAssignments.includes(assignmentId)) {
+                            row.remove();
+                        }
+                    });
+                } else {
+                    // No active assignments
+                    assignmentsContainer.innerHTML = `
+                        <div class="alert alert-info mt-4">
+                            <i class="fas fa-info-circle me-2"></i> 
+                            {% if section %}
+                                No assignments have been assigned to your classroom.
+                            {% else %}
+                                You are not enrolled in any classroom yet. Please join a classroom to see assignments.
+                            {% endif %}
+                        </div>
+                    `;
+                }
+                
+                // Update assignment progress counter
+                document.getElementById('assignment-progress').innerHTML = 
+                    `<i class="fas fa-tasks me-2"></i> ${completedCount} / ${assignments.length} complete`;
+            })
+            .catch(error => {
+                console.error('Error checking active assignments:', error);
+                
+                // If there's an error, check if the student might have been removed from the section
+                const assignmentsContainer = document.getElementById('assignments-container');
+                
+                // Display a message about potential section removal
+                if (error.status === 404 || error.status === 403) {
+                    assignmentsContainer.innerHTML = `
+                        <div class="alert alert-warning mt-4">
+                            <i class="fas fa-exclamation-triangle me-2"></i> 
+                            Unable to load assignments. You may have been removed from this classroom.
+                            Please refresh the page.
+                        </div>
+                    `;
+                }
+            });
+    }
+    
+    // Initial check
+    checkActiveAssignments();
+    
+    // Set interval for periodic checking (every 5 seconds)
+    const statusCheckInterval = setInterval(checkActiveAssignments, 5000);
+    
+    // Clear interval when page is unloaded
+    window.addEventListener('beforeunload', function() {
+        clearInterval(statusCheckInterval);
+    });
+});
+</script>
 {% endblock %} 

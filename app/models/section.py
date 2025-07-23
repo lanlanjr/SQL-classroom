@@ -8,6 +8,7 @@ class Section(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    database_name = db.Column(db.String(100), nullable=True)  # Database assigned to this section
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     invitation_token = db.Column(db.String(64), unique=True, nullable=True)
@@ -44,18 +45,18 @@ class Section(db.Model):
     def find_by_token(cls, token):
         """Find a section by its invitation token"""
         if not token:
-            print(f"Empty token provided")
+            # print(f"Empty token provided")
             return None
             
         # Get all sections to check for token match
         sections = cls.query.all()
         for section in sections:
-            print(f"Comparing: '{token}' with '{section.invitation_token}'")
+            # print(f"Comparing: '{token}' with '{section.invitation_token}'")
             if section.invitation_token and section.invitation_token == token:
-                print(f"Found matching section: {section.name}")
+                # print(f"Found matching section: {section.name}")
                 return section
                 
-        print(f"No section found with token: {token}")
+        # print(f"No section found with token: {token}")
         return cls.query.filter_by(invitation_token=token).first()
     
     def __repr__(self):

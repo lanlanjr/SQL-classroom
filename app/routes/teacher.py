@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, send_file, after_this_request, abort
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, send_file, after_this_request, abort, current_app, send_from_directory, make_response
 from flask_login import current_user, login_required
 from functools import wraps
 from app import db
@@ -11,9 +11,13 @@ import bleach
 from bleach.css_sanitizer import CSSSanitizer
 import pymysql
 from app.models.schema_import import SchemaImport
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, or_, asc, desc
 from flask_wtf import CSRFProtect
 from app import login_manager, csrf
+import secrets
+import string
+import pandas as pd
+from io import StringIO
 
 def teacher_required(f):
     @wraps(f)
@@ -545,6 +549,11 @@ def delete_question(question_id):
 @teacher.route('/students')
 @login_required
 def students():
+    # Get search parameters
+    search_query = request.args.get('search', '')
+    sort_field = request.args.get('sort', 'last_name')  # Default sort by last name
+    sort_order = request.args.get('order', 'asc')  # Default ascending order
+    
     # Get only students enrolled in sections created by this teacher
     teacher_sections = Section.query.filter_by(creator_id=current_user.id).all()
     teacher_section_ids = [section.id for section in teacher_sections]
@@ -556,8 +565,28 @@ def students():
     ).filter(
         User.role == 'student',
         StudentEnrollment.section_id.in_(teacher_section_ids) if teacher_section_ids else False
-    ).group_by(User.id)
+    )
     
+    # Apply search filter if provided
+    if search_query:
+        students_query = students_query.filter(
+            or_(
+                User.first_name.ilike(f'%{search_query}%'),
+                User.last_name.ilike(f'%{search_query}%'),
+                User.email.ilike(f'%{search_query}%')
+            )
+        )
+    
+    # Apply sorting
+    if sort_field == 'first_name':
+        students_query = students_query.order_by(asc(User.first_name) if sort_order == 'asc' else desc(User.first_name))
+    elif sort_field == 'last_name':
+        students_query = students_query.order_by(asc(User.last_name) if sort_order == 'asc' else desc(User.last_name))
+    elif sort_field == 'email':
+        students_query = students_query.order_by(asc(User.email) if sort_order == 'asc' else desc(User.email))
+    
+    # Group by user ID and get all students
+    students_query = students_query.group_by(User.id)
     students = students_query.all()
     
     # Get assignment stats for each student
@@ -597,7 +626,14 @@ def students():
             'correct_submissions': len(correct_submissions)
         }
     
-    return render_template('teacher/students.html', students=students, stats=stats)
+    return render_template(
+        'teacher/students.html', 
+        students=students, 
+        stats=stats, 
+        search_query=search_query,
+        sort_field=sort_field,
+        sort_order=sort_order
+    )
 
 @teacher.route('/student/<int:student_id>')
 @login_required
@@ -753,6 +789,7 @@ def new_section():
     if request.method == 'POST':
         name = request.form.get('name')
         description = sanitize_html(request.form.get('description'))
+        database_name = request.form.get('database_name', '').strip()
         
         if not name:
             flash('Section name is required.', 'danger')
@@ -762,6 +799,7 @@ def new_section():
         section = Section(
             name=name,
             description=description,
+            database_name=database_name if database_name else None,
             creator_id=current_user.id
         )
         
@@ -789,6 +827,9 @@ def view_section(section_id):
     # Get all assignments for this section
     section_assignments = SectionAssignment.query.filter_by(section_id=section.id).all()
     assignments = [sa.assignment for sa in section_assignments]
+    
+    # Create a map of assignment_id to section_assignment for the template
+    assignment_status = {sa.assignment_id: sa.is_active for sa in section_assignments}
     
     # Get submission stats for each student
     student_stats = {}
@@ -854,6 +895,8 @@ def view_section(section_id):
                            section=section, 
                            students=students, 
                            assignments=assignments,
+                           section_assignments=section_assignments,
+                           assignment_status=assignment_status,
                            student_stats=student_stats)
 
 @teacher.route('/section/<int:section_id>/edit', methods=['GET', 'POST'])
@@ -868,6 +911,8 @@ def edit_section(section_id):
     if request.method == 'POST':
         section.name = request.form.get('name')
         section.description = sanitize_html(request.form.get('description'))
+        database_name = request.form.get('database_name', '').strip()
+        section.database_name = database_name if database_name else None
         
         db.session.commit()
         
@@ -1054,12 +1099,38 @@ def revoke_invitation(section_id):
         flash('You can only manage your own sections.', 'danger')
         return redirect(url_for('teacher.sections'))
     
-    # Revoke the token
     section.invitation_token = None
     db.session.commit()
     
     flash('Invitation link has been revoked.', 'success')
     return redirect(url_for('teacher.section_invitation', section_id=section.id))
+
+@teacher.route('/section/delete/<int:section_id>', methods=['GET'])
+@login_required
+def delete_section(section_id):
+    section = Section.query.get_or_404(section_id)
+    
+    # Make sure the teacher owns this section
+    if section.creator_id != current_user.id:
+        flash('You can only delete your own sections.', 'danger')
+        return redirect(url_for('teacher.sections'))
+    
+    try:
+        # Store the name for the success message
+        section_name = section.name
+        
+        # Delete section
+        # Note: The model defines cascade='all, delete-orphan' for enrollments and section_assignments,
+        # so they will be automatically deleted
+        db.session.delete(section)
+        db.session.commit()
+        
+        flash(f'Section "{section_name}" has been successfully deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'An error occurred while deleting the section: {str(e)}', 'danger')
+    
+    return redirect(url_for('teacher.sections'))
 
 @teacher.route('/section/<int:section_id>/export_results')
 @login_required
@@ -1916,3 +1987,458 @@ def preview_question():
         
     except Exception as e:
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+
+@teacher.route('/section/<int:section_id>/assignment/<int:assignment_id>/toggle_status', methods=['POST'])
+@login_required
+def toggle_section_assignment_status(section_id, assignment_id):
+    section = Section.query.get_or_404(section_id)
+    
+    # Make sure the teacher owns this section
+    if section.creator_id != current_user.id:
+        flash('You can only manage your own sections.', 'danger')
+        return redirect(url_for('teacher.sections'))
+    
+    # Get the section assignment
+    section_assignment = SectionAssignment.query.filter_by(
+        section_id=section_id, 
+        assignment_id=assignment_id
+    ).first_or_404()
+    
+    # Toggle the status
+    section_assignment.is_active = not section_assignment.is_active
+    
+    status = "enabled" if section_assignment.is_active else "disabled"
+    
+    try:
+        db.session.commit()
+        flash(f'Assignment has been {status}!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating assignment status: {str(e)}', 'danger')
+    
+    return redirect(url_for('teacher.view_section', section_id=section_id))
+
+@teacher.route('/section/<int:section_id>/assignment/<int:assignment_id>/export_results')
+@login_required
+def export_assignment_results(section_id, assignment_id):
+    """Export results for a specific assignment in a section as Excel file."""
+    section = Section.query.get_or_404(section_id)
+    assignment = Assignment.query.get_or_404(assignment_id)
+    
+    # Make sure the teacher owns this section
+    if section.creator_id != current_user.id:
+        flash('You can only export results from your own sections.', 'danger')
+        return redirect(url_for('teacher.sections'))
+    
+    # Check if the assignment belongs to this section
+    section_assignment = SectionAssignment.query.filter_by(
+        section_id=section.id, 
+        assignment_id=assignment.id
+    ).first_or_404()
+    
+    # Get all students in this section
+    students = section.get_enrolled_students(active_only=True)
+    
+    # Create Excel workbook
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from openpyxl.utils.cell import get_column_letter
+    from flask import send_file
+    import tempfile
+    import os
+    
+    # Create a workbook with proper properties
+    wb = Workbook()
+    
+    # Set workbook properties
+    wb.properties.creator = "SQL Classroom"
+    wb.properties.title = f"Assignment {assignment.title} Results"
+    wb.properties.description = f"Student results for {assignment.title} in section {section.name}"
+    
+    # Remove default sheet and create a new one with valid name
+    if "Sheet" in wb.sheetnames:
+        std = wb["Sheet"]
+        wb.remove(std)
+    
+    # Create worksheet with properly escaped name (limit to 31 chars, no special chars)
+    assignment_name = ''.join(c for c in assignment.title if c.isalnum() or c in ' _-')[:20]
+    if not assignment_name:
+        assignment_name = f"Assignment_{assignment.id}"
+    sheet_name = assignment_name
+    ws = wb.create_sheet(title=sheet_name)
+    
+    # Find all questions in the assignment
+    assignment_questions = AssignmentQuestion.query.filter_by(assignment_id=assignment.id).order_by(AssignmentQuestion.order).all()
+    questions = [aq.question for aq in assignment_questions]
+    
+    # Create header row
+    headers = ["No.", "Last Name", "First Name", "Username", "Email"]
+    
+    # Add a column for each question
+    for i, question in enumerate(questions, 1):
+        # Limit title length to avoid Excel issues and remove invalid chars
+        title = ''.join(c for c in question.title if c not in '"*:<>?/\\|')
+        if len(title) > 30:
+            title = title[:27] + "..."
+        headers.append(f"Q{i}: {title}")
+    
+    # Add total score
+    headers.append("Total Score")
+    headers.append("Percentage")
+    
+    # Apply header styling
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal='center')
+        cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+    
+    # Calculate total possible points for this assignment
+    question_scores = {aq.question_id: aq.score for aq in assignment_questions}
+    total_possible = sum(question_scores.values())
+    
+    # Add data rows
+    for idx, student in enumerate(students, 1):
+        row_num = idx + 1
+        
+        # Basic student info
+        ws.cell(row=row_num, column=1, value=idx)
+        ws.cell(row=row_num, column=2, value=str(student.last_name or ""))
+        ws.cell(row=row_num, column=3, value=str(student.first_name or ""))
+        ws.cell(row=row_num, column=4, value=student.username)
+        ws.cell(row=row_num, column=5, value=student.email)
+        
+        # Get all submissions for this student and assignment
+        submissions = Submission.query.filter_by(
+            student_id=student.id,
+            assignment_id=assignment.id
+        ).all()
+        
+        # Get the most recent submission for each question
+        latest_submissions = {}
+        for submission in submissions:
+            question_id = submission.question_id
+            if question_id not in latest_submissions or submission.submitted_at > latest_submissions[question_id].submitted_at:
+                latest_submissions[question_id] = submission
+        
+        # Fill in question results
+        col_idx = 6  # Start after student info columns
+        earned_points = 0
+        
+        for question in questions:
+            question_id = question.id
+            question_score = question_scores.get(question_id, 0)
+            
+            if question_id in latest_submissions:
+                submission = latest_submissions[question_id]
+                if submission.is_correct:
+                    ws.cell(row=row_num, column=col_idx, value="Correct")
+                    earned_points += question_score
+                    # Add green fill for correct answers
+                    ws.cell(row=row_num, column=col_idx).fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                else:
+                    ws.cell(row=row_num, column=col_idx, value="Incorrect")
+                    # Add light red fill for incorrect answers
+                    ws.cell(row=row_num, column=col_idx).fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            else:
+                ws.cell(row=row_num, column=col_idx, value="Not Attempted")
+            
+            col_idx += 1
+        
+        # Add total score
+        ws.cell(row=row_num, column=col_idx, value=f"{earned_points}/{total_possible}")
+        
+        # Add percentage
+        if total_possible > 0:
+            percentage = round((earned_points / total_possible) * 100)
+            ws.cell(row=row_num, column=col_idx + 1, value=f"{percentage}%")
+        else:
+            ws.cell(row=row_num, column=col_idx + 1, value="N/A")
+    
+    # Adjust column widths
+    for col_idx, header in enumerate(headers, 1):
+        column_letter = get_column_letter(col_idx)
+        if col_idx == 1:  # Number column
+            ws.column_dimensions[column_letter].width = 5
+        elif col_idx in (2, 3):  # Name columns
+            ws.column_dimensions[column_letter].width = 15
+        elif col_idx == 4:  # Username column
+            ws.column_dimensions[column_letter].width = 15
+        elif col_idx == 5:  # Email column
+            ws.column_dimensions[column_letter].width = 25
+        elif "Q" in header:  # Question columns
+            ws.column_dimensions[column_letter].width = 20
+        else:  # Total columns
+            ws.column_dimensions[column_letter].width = 12
+    
+    # Save to a temporary file
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+    temp_file.close()
+    
+    try:
+        # Set proper workbook protection options
+        wb.security.lockStructure = False
+        
+        # Save with explicit options
+        wb.save(temp_file.name)
+        
+        # Send the file
+        filename = f"{section.name}_{assignment_name}_results.xlsx"
+        safe_filename = ''.join(c for c in filename if c.isalnum() or c in ' _-.()[]{}')
+        
+        return_data = send_file(
+            temp_file.name,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=safe_filename
+        )
+        
+        # Schedule file for deletion after request
+        @after_this_request
+        def remove_file(response):
+            try:
+                os.unlink(temp_file.name)
+            except Exception as e:
+                print(f"Error removing temporary file: {e}")
+            return response
+        
+        return return_data
+        
+    except Exception as e:
+        print(f"Error generating Excel file: {e}")
+        # Clean up temp file in case of error
+        try:
+            os.unlink(temp_file.name)
+        except:
+            pass
+        flash(f'Error generating Excel file: {str(e)}', 'danger')
+        return redirect(url_for('teacher.view_section', section_id=section.id))
+
+@teacher.route('/section/<int:section_id>/assignment/<int:assignment_id>/duplicate', methods=['GET'])
+@login_required
+def duplicate_section_assignment(section_id, assignment_id):
+    section = Section.query.get_or_404(section_id)
+    
+    # Make sure the teacher owns this section
+    if section.creator_id != current_user.id:
+        flash('You can only manage your own sections.', 'danger')
+        return redirect(url_for('teacher.sections'))
+    
+    # Get the assignment to duplicate
+    original_assignment = Assignment.query.get_or_404(assignment_id)
+    
+    # Create a new assignment as a copy of the original
+    new_assignment = Assignment(
+        title=f"{original_assignment.title} (Copy)",
+        description=original_assignment.description,
+        due_date=original_assignment.due_date,
+        creator_id=current_user.id
+    )
+    
+    db.session.add(new_assignment)
+    db.session.flush()  # Generate ID for the new assignment
+    
+    # Copy all questions and their scores from the original assignment
+    original_questions = AssignmentQuestion.query.filter_by(assignment_id=original_assignment.id).all()
+    
+    for aq in original_questions:
+        new_aq = AssignmentQuestion(
+            assignment_id=new_assignment.id,
+            question_id=aq.question_id,
+            order=aq.order,
+            score=aq.score
+        )
+        db.session.add(new_aq)
+    
+    # Add the new assignment to the current section
+    section_assignment = SectionAssignment(
+        section_id=section.id,
+        assignment_id=new_assignment.id,
+        is_active=True
+    )
+    db.session.add(section_assignment)
+    
+    try:
+        db.session.commit()
+        flash(f'Assignment "{original_assignment.title}" has been duplicated successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error duplicating assignment: {str(e)}', 'danger')
+    
+    return redirect(url_for('teacher.view_section', section_id=section.id))
+
+@teacher.route('/student/<int:student_id>/reset_password', methods=['POST'])
+@login_required
+@teacher_required
+def reset_student_password(student_id):
+    # Get the student
+    student = User.query.filter_by(id=student_id, role='student').first_or_404()
+    
+    # Get the student's enrollments
+    student_enrollments = StudentEnrollment.query.filter_by(
+        student_id=student.id,
+        is_active=True
+    ).all()
+    student_section_ids = [enrollment.section_id for enrollment in student_enrollments]
+    
+    # Get sections created by this teacher
+    teacher_sections = Section.query.filter_by(creator_id=current_user.id).all()
+    teacher_section_ids = [section.id for section in teacher_sections]
+    
+    # Check if the student is in any of the teacher's sections
+    is_in_teacher_section = any(section_id in teacher_section_ids for section_id in student_section_ids)
+    
+    if not is_in_teacher_section:
+        flash('You can only reset passwords for students enrolled in your sections.', 'danger')
+        return redirect(url_for('teacher.students'))
+    
+    try:
+        # Generate a temporary password
+        import secrets
+        import string
+        
+        # Generate a random password with 10 characters
+        temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+        
+        # Set the new password for the student
+        student.set_password(temp_password)
+        db.session.commit()
+        
+        # Show the temporary password to the teacher
+        flash(f'Password for {student.full_name} has been reset. Temporary password: {temp_password}', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error resetting password: {str(e)}', 'danger')
+    
+    # Return to the student details page
+    return redirect(url_for('teacher.view_student', student_id=student.id))
+
+@teacher.route('/sql-playground', methods=['GET'])
+@login_required
+@teacher_required
+def sql_playground():
+    """Display the SQL Playground page where teachers can practice SQL queries."""
+    return render_template('teacher/sql_playground.html')
+
+@teacher.route('/api/playground-execute', methods=['POST'])
+@login_required
+@teacher_required
+@csrf.exempt
+def playground_execute():
+    """API endpoint to execute SQL queries in the playground."""
+    data = request.json
+    if not data or 'query' not in data or 'database_name' not in data:
+        return jsonify({'error': 'Missing required parameters'}), 400
+    
+    query = data['query'].strip()
+    database_name = data['database_name'].strip()
+    
+    try:
+        # Teachers can execute a wider range of queries than students
+        try:
+            # Connect to MySQL using the provided database name
+            conn = pymysql.connect(
+                host=os.environ.get('MYSQL_HOST', 'localhost'),
+                user=os.environ.get('MYSQL_USER', 'root'),
+                password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                port=int(os.environ.get('MYSQL_PORT', 3306)),
+                database=database_name,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            
+            # Execute query and fetch results
+            with conn.cursor() as cursor:
+                # Execute the query
+                cursor.execute(query)
+                
+                # Check if this is a SELECT query by looking for a result set
+                if cursor.description:
+                    # For SELECT queries, get the results
+                    data = cursor.fetchall()
+                    
+                    # Get column names directly from cursor description
+                    columns = [col[0] for col in cursor.description]
+                    
+                    # Convert dictionary data to lists for JSON response
+                    rows = []
+                    for row in data:
+                        # Convert any non-JSON serializable objects to strings
+                        serializable_row = {}
+                        for key, value in row.items():
+                            if isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                                serializable_row[key] = value
+                            else:
+                                serializable_row[key] = str(value)
+                        
+                        # Ensure values are in the same order as columns
+                        row_values = [serializable_row.get(col) for col in columns]
+                        rows.append(row_values)
+                    
+                    result = {
+                        'columns': columns,
+                        'data': rows
+                    }
+                else:
+                    # For non-SELECT queries (INSERT, UPDATE, etc.)
+                    affected_rows = cursor.rowcount
+                    result = {
+                        'columns': ['Result'],
+                        'data': [[f"{affected_rows} row(s) affected"]]
+                    }
+            
+            conn.close()
+            return jsonify(result)
+            
+        except pymysql.err.OperationalError as e:
+            error_code, error_message = e.args
+            if error_code == 1049:  # Unknown database
+                return jsonify({'error': f'Database "{database_name}" does not exist'}), 404
+            elif error_code == 1045:  # Access denied
+                return jsonify({'error': 'Access denied. Check your database credentials.'}), 403
+            clean_message = error_message.replace('\n', ' ')
+            return jsonify({'error': f'Database Error: {clean_message}'}), 400
+        except pymysql.err.ProgrammingError as e:
+            error_code, error_message = e.args
+            clean_message = error_message.replace('\n', ' ')
+            return jsonify({'error': f'SQL Error: {clean_message}'}), 400
+        except Exception as e:
+            print(f"MySQL query error: {str(e)}")
+            return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
+            
+    except Exception as e:
+        print(f"Unexpected error in playground_execute: {str(e)}")
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+
+@teacher.route('/api/get-available-databases', methods=['GET'])
+@login_required
+@teacher_required
+def get_available_databases():
+    """API endpoint to get a list of available MySQL databases."""
+    try:
+        # Connect to MySQL using root credentials
+        conn = pymysql.connect(
+            host=os.environ.get('MYSQL_HOST', 'localhost'),
+            user=os.environ.get('MYSQL_USER', 'root'),
+            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        
+        # Execute query to get databases
+        with conn.cursor() as cursor:
+            cursor.execute("SHOW DATABASES")
+            all_databases = [db['Database'] for db in cursor.fetchall()]
+            
+            # For teachers, we include all databases except a few system ones
+            system_dbs = ['sys']  # Keep information_schema, mysql, performance_schema for admin purposes
+            user_databases = [db for db in all_databases if db not in system_dbs]
+            
+            # Sort alphabetically
+            user_databases.sort()
+        
+        conn.close()
+        return jsonify({'databases': user_databases})
+        
+    except Exception as e:
+        print(f"Error fetching databases: {str(e)}")
+        return jsonify({'error': str(e), 'databases': []}), 500

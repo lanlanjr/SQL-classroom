@@ -199,6 +199,7 @@ After running the scripts, you can use these accounts:
 
 ```bash
 python run.py
+flask run --host=0.0.0.0 --debug
 ```
 
 The application will be available at http://localhost:5000

@@ -699,7 +699,7 @@
         });
         
         {% if question.disable_copy_paste %}
-        // ... existing copy-paste prevention code ...
+        // Placeholder for copy-paste prevention - implemented below
         {% endif %}
         
         // Initialize CodeMirror for SQL editor
@@ -715,6 +715,26 @@
             autoCloseBrackets: true,
             readOnly: isReadOnly
         });
+
+        // Copy-paste prevention if enabled
+        {% if question.disable_copy_paste %}
+        sqlEditor.on('beforeChange', function(cm, change) {
+            if (change.origin === 'paste') {
+                change.cancel();
+            }
+        });
+
+        var editorElem = sqlEditor.getWrapperElement();
+        editorElem.addEventListener('copy', function(e) {
+            e.preventDefault();
+        });
+        editorElem.addEventListener('cut', function(e) {
+            e.preventDefault();
+        });
+        editorElem.addEventListener('paste', function(e) {
+            e.preventDefault();
+        });
+        {% endif %}
         
         // Execute Query Button
         document.getElementById('execute-btn').addEventListener('click', function() {
@@ -1046,6 +1066,38 @@
                 confirmButtonText: 'Try Again'
             });
         }
+
+        // Check if assignment is still active every 10 seconds
+        const checkAssignmentStatus = () => {
+            fetch(`{{ url_for('student.check_assignment_status', assignment_id=assignment_id) }}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.active) {
+                        // Show alert and redirect to dashboard
+                        Swal.fire({
+                            title: 'Assignment Disabled',
+                            text: data.message || 'This assignment has been disabled by your teacher.',
+                            icon: 'warning',
+                            confirmButtonColor: '#3085d6',
+                            confirmButtonText: 'Return to Dashboard'
+                        }).then(() => {
+                            window.location.href = '{{ url_for('student.dashboard') }}';
+                        });
+                    }
+                })
+                .catch(error => console.error('Error checking assignment status:', error));
+        };
+
+        // Initial check
+        checkAssignmentStatus();
+        
+        // Set interval for periodic checking (every 10 seconds)
+        const statusCheckInterval = setInterval(checkAssignmentStatus, 5000);
+        
+        // Clear interval when page is unloaded
+        window.addEventListener('beforeunload', function() {
+            clearInterval(statusCheckInterval);
+        });
     });
 </script>
 {% endblock %} 

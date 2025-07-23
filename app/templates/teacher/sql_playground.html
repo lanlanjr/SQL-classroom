@@ -1,0 +1,708 @@
+{% extends "layout.html" %}
+
+{% block title %}SQL Playground - SQL Classroom{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- Include CodeMirror for SQL editing -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/theme/monokai.min.css">
+<style>
+    /* Override browser scrollbar hiding */
+    body {
+        overflow: auto !important;
+    }
+    body::-webkit-scrollbar {
+        display: block !important;
+    }
+    .CodeMirror {
+        height: 300px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .result-table {
+        overflow-x: auto;
+        max-height: 400px;
+    }
+    #loading-indicator {
+        display: none;
+        text-align: center;
+        padding: 20px;
+    }
+    .history-item {
+        cursor: pointer;
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+        transition: background-color 0.2s ease;
+    }
+    .history-item:hover {
+        background-color: #f8f9fa;
+    }
+    .history-item:last-child {
+        border-bottom: none;
+    }
+    /* Main history container styling - more aggressive */
+    #history-list {
+        max-height: 300px;
+        height: 300px !important;
+        overflow-y: scroll !important; /* Force scrollbar to always show */
+        overflow-x: hidden;
+        scrollbar-width: thin !important;
+        border: 1px solid #eee;
+        border-radius: 4px;
+        padding-right: 4px;
+        margin-bottom: 0;
+        display: block !important; /* Ensure it's always displayed as a block */
+        position: relative; /* For absolute positioning of scrollbar */
+    }
+    /* Additional fix for Safari */
+    _::-webkit-full-page-media, _:future, :root #history-list {
+        -webkit-overflow-scrolling: touch;
+        overflow-y: scroll !important;
+    }
+    /* Add a dummy div to force scrollbar to show if needed */
+    .history-container::after {
+        content: '';
+        height: 1px; /* Minimal height */
+        display: block;
+    }
+    .history-items-container {
+        min-height: 100%;
+        padding-bottom: 20px;
+    }
+    /* Ensure minimum height for proper scrolling even with few items */
+    .history-container .history-items-container:only-child {
+        min-height: 300px;
+    }
+    /* Styling for WebKit browsers (Chrome, Safari) */
+    .history-container::-webkit-scrollbar {
+        width: 8px !important;
+        display: block !important;
+        background-color: #f1f1f1;
+    }
+    .history-container::-webkit-scrollbar-track {
+        background: #f1f1f1 !important;
+        border-radius: 4px;
+        display: block !important;
+    }
+    .history-container::-webkit-scrollbar-thumb {
+        background: #c1c1c1 !important;
+        border-radius: 4px;
+        display: block !important;
+        min-height: 40px; /* Ensure thumb is visible */
+    }
+    .history-container::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8 !important;
+    }
+    /* For Firefox */
+    .history-container {
+        scrollbar-color: #c1c1c1 #f1f1f1 !important;
+        scrollbar-width: thin !important;
+    }
+    /* Empty history state */
+    #history-empty-state {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    /* Ensure scrollbar is visible regardless of content */
+    .force-scrollbar {
+        overflow-y: scroll !important;
+    }
+    
+    /* Ensure error message is always visible when needed */
+    #error-message {
+        position: relative;
+        z-index: 10;
+    }
+    #error-message[style*="block"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    /* Custom error message styling */
+    .custom-error-message {
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 1.5;
+        min-height: 20px;
+    }
+    .custom-error-message[style*="display: block"] {
+        display: block !important;
+    }
+    .custom-error-message[style*="display:block"] {
+        display: block !important;
+    }
+    /* Teacher specific styles */
+    .teacher-badge {
+        background-color: #5a6268;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        margin-left: 0.5rem;
+    }
+    /* Remove query-type-tabs styles */
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>SQL Playground <span class="teacher-badge">Teacher Mode</span></h1>
+</div>
+
+<div class="row">
+    <!-- Left column: SQL editor and controls -->
+    <div class="col-md-8">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">SQL Editor</h5>
+            </div>
+            <div class="card-body">
+                <form id="sql-playground-form">
+                    <div class="mb-3">
+                        <label for="database-name" class="form-label">Database Name</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="database-name" placeholder="Enter database name" list="database-list">
+                            <datalist id="database-list"></datalist>
+                            <button type="button" class="btn btn-outline-secondary" id="refresh-databases">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">Enter the name of an existing MySQL database to query or select from the list.</div>
+                    </div>
+                    
+                    <!-- Query type tabs for teachers - REMOVED -->
+                    
+                    <div class="mb-3">
+                        <label for="sql-editor" class="form-label">SQL Query</label>
+                        <textarea id="sql-editor" class="form-control"></textarea>
+                        <div class="form-text" id="query-help-text">Write your SQL query here. As a teacher, you have access to all SQL operations including SELECT, INSERT, UPDATE, DELETE, and schema operations.</div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="button" id="clear-btn" class="btn btn-outline-secondary">
+                            <i class="fas fa-eraser"></i> Clear
+                        </button>
+                        <button type="submit" id="execute-btn" class="btn btn-primary">
+                            <i class="fas fa-play"></i> Execute
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Results section -->
+        <div class="card shadow">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Results</h5>
+                <button id="export-csv" class="btn btn-sm btn-outline-secondary" style="display: none;">
+                    <i class="fas fa-download"></i> Export CSV
+                </button>
+            </div>
+            <!-- Move error message outside the p-0 container -->
+            <div id="error-message" class="custom-error-message" style="display: none; background-color: #f8d7da; color: #721c24; padding: 12px; margin: 12px; border-radius: 6px; border: 1px solid #f5c6cb;"></div>
+            <div class="card-body p-0">
+                <div id="loading-indicator">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Executing query...</p>
+                </div>
+                <div id="result-container" class="result-table">
+                    <div class="text-center text-muted p-4">
+                        <i class="fas fa-database fa-2x mb-2"></i>
+                        <p>Enter a database name and SQL query to see results here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: Query history and hints -->
+    <div class="col-md-4">
+        <div class="card shadow mb-4" style="height: calc(350px + 2rem);">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Query History</h5>
+                <button id="clear-history" class="btn btn-sm btn-outline-danger" title="Clear all history">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+            <div class="card-body p-0" style="height: calc(100% - 3rem); overflow: hidden;">
+                <div id="history-list" class="history-container">
+                    <div id="history-empty-state" class="text-center text-muted p-4">
+                        <i class="fas fa-history fa-2x mb-2"></i>
+                        <p>Your query history will appear here.</p>
+                    </div>
+                    <!-- Spacer to ensure scrollbar is always visible -->
+                    <div class="scrollbar-spacer" style="height: 1000px; width: 1px; opacity: 0; position: absolute;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Teacher SQL Reference</h5>
+            </div>
+            <div class="card-body">
+                <h6>Query Templates</h6>
+                <div class="list-group mb-3">
+                    <button class="list-group-item list-group-item-action template-btn" data-template="SHOW DATABASES;">Show all databases</button>
+                    <button class="list-group-item list-group-item-action template-btn" data-template="SHOW TABLES;">Show all tables</button>
+                    <button class="list-group-item list-group-item-action template-btn" data-template="DESCRIBE table_name;">Describe table structure</button>
+                    <button class="list-group-item list-group-item-action template-btn" data-template="SELECT * FROM table_name LIMIT 10;">Select data from table</button>
+                    <button class="list-group-item list-group-item-action template-btn" data-template="CREATE TABLE new_table (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);">Create table template</button>
+                    <button class="list-group-item list-group-item-action template-btn" data-template="INSERT INTO table_name (column1, column2) VALUES ('value1', 'value2');">Insert data template</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- CodeMirror for SQL Editor -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/mode/sql/sql.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/addon/hint/show-hint.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.0/addon/hint/sql-hint.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add class to body to ensure scrollbars are visible
+    document.body.classList.add('force-scrollbar');
+    
+    // Initialize CodeMirror SQL editor
+    const sqlEditor = CodeMirror.fromTextArea(document.getElementById('sql-editor'), {
+        mode: 'text/x-mysql',
+        theme: 'default',
+        lineNumbers: true,
+        indentWithTabs: false,
+        indentUnit: 4,
+        smartIndent: true,
+        tabSize: 4,
+        extraKeys: {
+            'Ctrl-Space': 'autocomplete',
+            'Tab': function(cm) {
+                var spaces = Array(cm.getOption('indentUnit') + 1).join(' ');
+                cm.replaceSelection(spaces);
+            },
+            'Ctrl-Enter': function(cm) {
+                executeQuery();
+            },
+            'F5': function(cm) {
+                executeQuery();
+                return false; // Prevent default browser refresh
+            }
+        }
+    });
+
+    // Elements
+    const form = document.getElementById('sql-playground-form');
+    const databaseInput = document.getElementById('database-name');
+    const executeBtn = document.getElementById('execute-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const resultContainer = document.getElementById('result-container');
+    const errorMessage = document.getElementById('error-message');
+    const historyList = document.getElementById('history-list');
+    const exportCsvBtn = document.getElementById('export-csv');
+    const refreshDatabasesBtn = document.getElementById('refresh-databases');
+    const databaseList = document.getElementById('database-list');
+    const clearHistoryBtn = document.getElementById('clear-history');
+    const templateBtns = document.querySelectorAll('.template-btn');
+    const helpText = document.getElementById('query-help-text');
+    
+    // Remove query type tabs code
+    
+    // Add template button handlers
+    templateBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            sqlEditor.setValue(this.getAttribute('data-template'));
+            sqlEditor.focus();
+        });
+    });
+
+    // Query history array
+    let queryHistory = JSON.parse(localStorage.getItem('teacherSqlPlaygroundHistory') || '[]');
+    
+    // Force scrollbar to appear initially
+    setTimeout(function() {
+        document.querySelector('.history-container').style.overflowY = 'scroll';
+        document.querySelector('.history-container').style.height = '300px';
+    }, 100);
+    
+    // Load available databases
+    function loadDatabases() {
+        fetch('{{ url_for("teacher.get_available_databases") }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                // Clear existing options
+                databaseList.innerHTML = '';
+                
+                // Add options for each database
+                data.databases.forEach(db => {
+                    const option = document.createElement('option');
+                    option.value = db;
+                    databaseList.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading databases:', error);
+            });
+    }
+    
+    // Load databases on page load
+    loadDatabases();
+    
+    // Refresh databases button handler
+    refreshDatabasesBtn.addEventListener('click', loadDatabases);
+    
+    // Update history list in UI
+    function updateHistoryList() {
+        if (queryHistory.length === 0) {
+            historyList.innerHTML = `
+                <div id="history-empty-state" class="text-center text-muted p-4">
+                    <i class="fas fa-history fa-2x mb-2"></i>
+                    <p>Your query history will appear here.</p>
+                </div>
+                <!-- Force scrollbar to appear -->
+                <div style="height: 1000px; opacity: 0; position: absolute; pointer-events: none;"></div>
+            `;
+            // Hide the clear history button
+            clearHistoryBtn.style.display = 'none';
+            return;
+        }
+
+        // Show the clear history button
+        clearHistoryBtn.style.display = '';
+
+        // Clear existing content
+        historyList.innerHTML = '';
+        
+        // Create a container for the history items to ensure proper scrolling
+        const historyItemsContainer = document.createElement('div');
+        historyItemsContainer.className = 'history-items-container';
+        
+        // Display most recent queries first
+        for (let i = queryHistory.length - 1; i >= 0; i--) {
+            const item = queryHistory[i];
+            const historyItem = document.createElement('div');
+            historyItem.className = 'history-item';
+            historyItem.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="text-truncate" style="max-width: 75%;">
+                        <small class="text-muted">${item.database}</small>
+                        <div class="text-truncate"><code>${item.query.substring(0, 30)}${item.query.length > 30 ? '...' : ''}</code></div>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-link p-0 use-query me-2" data-index="${i}" title="Use this query">
+                            <i class="fas fa-reply"></i>
+                        </button>
+                        <button class="btn btn-sm btn-link p-0 delete-query" data-index="${i}" title="Delete this query">
+                            <i class="fas fa-times text-danger"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Add click event to use this query
+            historyItem.querySelector('.use-query').addEventListener('click', function(e) {
+                e.stopPropagation();
+                const index = this.getAttribute('data-index');
+                const item = queryHistory[index];
+                databaseInput.value = item.database;
+                sqlEditor.setValue(item.query);
+                sqlEditor.focus();
+            });
+            
+            // Add click event to delete this query
+            historyItem.querySelector('.delete-query').addEventListener('click', function(e) {
+                e.stopPropagation();
+                const index = this.getAttribute('data-index');
+                queryHistory.splice(index, 1);
+                localStorage.setItem('teacherSqlPlaygroundHistory', JSON.stringify(queryHistory));
+                updateHistoryList();
+            });
+            
+            // Add the history item to the container
+            historyItemsContainer.appendChild(historyItem);
+        }
+        
+        // Add the container to the history list
+        historyList.appendChild(historyItemsContainer);
+        
+        // Force a layout recalculation to ensure proper scrolling
+        historyList.scrollTop = 0;
+        
+        // Add a large invisible element to force scrollbar to appear
+        const scrollForcer = document.createElement('div');
+        scrollForcer.style.cssText = 'height: 1000px; opacity: 0; position: absolute; pointer-events: none;';
+        historyList.appendChild(scrollForcer);
+    }
+
+    // Initial history list update
+    updateHistoryList();
+    
+    // Clear button handler
+    clearBtn.addEventListener('click', function() {
+        sqlEditor.setValue('');
+        resultContainer.innerHTML = `
+            <div class="text-center text-muted p-4">
+                <i class="fas fa-database fa-2x mb-2"></i>
+                <p>Enter a database name and SQL query to see results here.</p>
+            </div>
+        `;
+        errorMessage.style.display = 'none';
+        exportCsvBtn.style.display = 'none';
+    });
+    
+    // Clear history button handler
+    clearHistoryBtn.addEventListener('click', function() {
+        // Ask for confirmation
+        if (confirm('Are you sure you want to clear your query history? This cannot be undone.')) {
+            queryHistory = [];
+            localStorage.removeItem('teacherSqlPlaygroundHistory');
+            updateHistoryList();
+        }
+    });
+
+    // Form submit handler
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        executeQuery();
+    });
+    
+    // Add tooltips for keyboard shortcuts
+    const shortcutsInfo = document.createElement('div');
+    shortcutsInfo.className = 'small text-muted mt-2';
+    shortcutsInfo.innerHTML = '<i class="fas fa-keyboard me-1"></i> Keyboard shortcuts: <code>Ctrl+Enter</code> or <code>F5</code> to execute query';
+    form.appendChild(shortcutsInfo);
+
+    // Export to CSV function
+    exportCsvBtn.addEventListener('click', function() {
+        const table = document.querySelector('#result-container table');
+        if (!table) return;
+
+        // Get headers
+        const headers = [];
+        table.querySelectorAll('thead th').forEach(th => {
+            headers.push(th.textContent);
+        });
+
+        // Get data rows
+        const rows = [];
+        table.querySelectorAll('tbody tr').forEach(tr => {
+            const row = [];
+            tr.querySelectorAll('td').forEach(td => {
+                // Handle quotes in CSV data
+                let cellText = td.textContent;
+                if (cellText.includes(',') || cellText.includes('"') || cellText.includes('\n')) {
+                    cellText = '"' + cellText.replace(/"/g, '""') + '"';
+                }
+                row.push(cellText);
+            });
+            rows.push(row.join(','));
+        });
+
+        // Create CSV content
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        
+        // Create download link
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `sql_playground_results_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    // Execute query function
+    function executeQuery() {
+        const database = databaseInput.value.trim();
+        const query = sqlEditor.getValue().trim();
+        
+        if (!database) {
+            showError('Please enter a database name.');
+            return;
+        }
+        
+        if (!query) {
+            showError('Please enter an SQL query.');
+            return;
+        }
+
+        // Add to history if not already there
+        const historyItem = { database, query };
+        queryHistory = queryHistory.filter(item => !(item.database === database && item.query === query));
+        queryHistory.push(historyItem);
+        
+        // Limit history to 20 items
+        if (queryHistory.length > 20) {
+            queryHistory.shift();
+        }
+        
+        // Save to localStorage
+        localStorage.setItem('teacherSqlPlaygroundHistory', JSON.stringify(queryHistory));
+        updateHistoryList();
+
+        // Show loading indicator
+        loadingIndicator.style.display = 'block';
+        resultContainer.innerHTML = '';
+        errorMessage.style.display = 'none';
+        exportCsvBtn.style.display = 'none';
+        
+        // Disable execute button
+        executeBtn.disabled = true;
+
+        // Send API request
+        fetch('{{ url_for("teacher.playground_execute") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                database_name: database,
+                query: query
+            })
+        })
+        .then(response => {
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            return response.json().then(data => ({
+                status: response.status,
+                ok: response.ok,
+                data: data
+            }));
+        })
+        .then(result => {
+            console.log('Response data:', result.data);
+            // Hide loading indicator
+            loadingIndicator.style.display = 'none';
+            
+            // Re-enable execute button
+            executeBtn.disabled = false;
+            
+            // Check for errors (both from response status and data.error)
+            if (!result.ok || result.data.error) {
+                const errorMsg = result.data.error || `HTTP Error ${result.status}`;
+                console.log('Showing error:', errorMsg);
+                showError(errorMsg);
+                return;
+            }
+            
+            // Display results
+            displayResults(result.data.columns, result.data.data);
+            exportCsvBtn.style.display = 'block';
+        })
+        .catch(error => {
+            // Hide loading indicator
+            loadingIndicator.style.display = 'none';
+            
+            // Re-enable execute button
+            executeBtn.disabled = false;
+            
+            showError('An error occurred while executing the query. Please try again.');
+            console.error('Error:', error);
+        });
+    }
+
+    // Display error message
+    function showError(message) {
+        console.log('showError called with message:', message);
+        console.log('errorMessage element before:', errorMessage);
+        console.log('errorMessage visibility before:', window.getComputedStyle(errorMessage).display);
+        
+        errorMessage.textContent = message;
+        errorMessage.style.display = 'block';
+        errorMessage.style.visibility = 'visible';
+        errorMessage.style.opacity = '1';
+        
+        // Force reflow
+        errorMessage.offsetHeight;
+        
+        console.log('Error message display set to block');
+        console.log('Error message computed style after:', window.getComputedStyle(errorMessage).display);
+        console.log('Error message visibility after:', window.getComputedStyle(errorMessage).visibility);
+        console.log('Error message opacity after:', window.getComputedStyle(errorMessage).opacity);
+        console.log('Error message innerHTML:', errorMessage.innerHTML);
+        console.log('Error message clientHeight:', errorMessage.clientHeight);
+        console.log('Error message offsetHeight:', errorMessage.offsetHeight);
+    }
+
+    // Display query results
+    function displayResults(columns, data) {
+        // Hide error message when displaying successful results
+        errorMessage.style.display = 'none';
+        
+        if (!columns || !data) {
+            resultContainer.innerHTML = `
+                <div class="alert alert-info m-3">
+                    <i class="fas fa-info-circle me-2"></i> No results returned.
+                </div>
+            `;
+            return;
+        }
+
+        let tableHtml = `
+            <table class="table table-striped table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        ${columns.map(col => `<th>${escapeHtml(col)}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        if (data.length === 0) {
+            tableHtml += `
+                <tr>
+                    <td colspan="${columns.length}" class="text-center">No rows returned</td>
+                </tr>
+            `;
+        } else {
+            data.forEach(row => {
+                tableHtml += '<tr>';
+                row.forEach(cell => {
+                    tableHtml += `<td>${cell === null ? '<em class="text-muted">NULL</em>' : escapeHtml(cell)}</td>`;
+                });
+                tableHtml += '</tr>';
+            });
+        }
+
+        tableHtml += `
+                </tbody>
+            </table>
+        `;
+
+        resultContainer.innerHTML = tableHtml;
+    }
+
+    // Helper function to escape HTML
+    function escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) return '';
+        return String(unsafe)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+});
+</script>
+{% endblock %} 

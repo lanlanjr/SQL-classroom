@@ -10,6 +10,29 @@
     </a>
 </div>
 
+<div class="card shadow mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Search Students</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('teacher.students') }}" class="row g-3">
+            <div class="col-md-8">
+                <div class="input-group">
+                    <input type="text" class="form-control" placeholder="Search by name or email" name="search" value="{{ search_query }}">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fas fa-search me-1"></i> Search
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <button type="button" class="btn btn-outline-secondary" onclick="window.location.href='{{ url_for('teacher.students') }}'">
+                    <i class="fas fa-times me-1"></i> Clear Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="card shadow">
     <div class="card-header bg-light">
         <h5 class="mb-0">Students</h5>
@@ -20,8 +43,21 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Student Name</th>
-                            <th>Email</th>
+                            <th>
+                                Student Name
+                                <a href="{{ url_for('teacher.students', search=search_query, sort='last_name', order='asc' if sort_field != 'last_name' or sort_order == 'desc' else 'desc') }}" class="ms-1 text-decoration-none">
+                                    <i class="fas fa-sort{% if sort_field == 'last_name' %}-{{ 'up' if sort_order == 'asc' else 'down' }}{% endif %}"></i>
+                                </a>
+                                <a href="{{ url_for('teacher.students', search=search_query, sort='first_name', order='asc' if sort_field != 'first_name' or sort_order == 'desc' else 'desc') }}" class="ms-1 text-decoration-none">
+                                    <i class="fas fa-sort{% if sort_field == 'first_name' %}-{{ 'up' if sort_order == 'asc' else 'down' }}{% endif %}"></i>
+                                </a>
+                            </th>
+                            <th>
+                                Email
+                                <a href="{{ url_for('teacher.students', search=search_query, sort='email', order='asc' if sort_field != 'email' or sort_order == 'desc' else 'desc') }}" class="ms-1 text-decoration-none">
+                                    <i class="fas fa-sort{% if sort_field == 'email' %}-{{ 'up' if sort_order == 'asc' else 'down' }}{% endif %}"></i>
+                                </a>
+                            </th>
                             <th>Assignments</th>
                             <th>Submissions</th>
                             <th>Success Rate</th>
@@ -65,6 +101,12 @@
                                         <a href="{{ url_for('teacher.view_student', student_id=student.id) }}" class="btn btn-sm btn-primary">
                                             <i class="fas fa-user me-1"></i> View Details
                                         </a>
+                                        <form action="{{ url_for('teacher.reset_student_password', student_id=student.id) }}" method="POST" class="d-inline ms-1">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Are you sure you want to reset the password for {{ student.username }}? A temporary password will be generated.');">
+                                                <i class="fas fa-key me-1"></i> Reset Password
+                                            </button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
@@ -74,7 +116,12 @@
             </div>
         {% else %}
             <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i> No students have registered in the system yet.
+                {% if search_query %}
+                    <i class="fas fa-info-circle me-2"></i> No students found matching your search criteria.
+                    <a href="{{ url_for('teacher.students') }}" class="alert-link">Clear search</a> to see all students.
+                {% else %}
+                    <i class="fas fa-info-circle me-2"></i> No students have registered in the system yet.
+                {% endif %}
             </div>
         {% endif %}
     </div>

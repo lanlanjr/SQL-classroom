@@ -29,6 +29,7 @@
                             <th>Description</th>
                             <th>Students</th>
                             <th>Assignments</th>
+                            <th>Database</th>
                             <th>Created At</th>
                             <th>Actions</th>
                         </tr>
@@ -44,6 +45,13 @@
                                 </td>
                                 <td>
                                     <span class="badge bg-primary">{{ stats.assignment_count }} assignment(s)</span>
+                                </td>
+                                <td>
+                                    {% if section.database_name %}
+                                        <span class="badge bg-success">{{ section.database_name }}</span>
+                                    {% else %}
+                                        <span class="text-muted">None</span>
+                                    {% endif %}
                                 </td>
                                 <td>{{ section.created_at.strftime('%Y-%m-%d') }}</td>
                                 <td>
@@ -63,6 +71,9 @@
                                         <a href="{{ url_for('teacher.export_section_results', section_id=section.id) }}" class="btn btn-sm btn-info">
                                             <i class="fas fa-file-excel"></i> Export Results
                                         </a>
+                                        <a href="#" class="btn btn-sm btn-danger delete-section" data-section-id="{{ section.id }}" data-section-name="{{ section.name }}">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </a>
                                     </div>
                                 </td>
                             </tr>
@@ -78,4 +89,32 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add click event listener to all delete buttons
+    document.querySelectorAll('.delete-section').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const sectionId = this.getAttribute('data-section-id');
+            const sectionName = this.getAttribute('data-section-name');
+            
+            Swal.fire({
+                title: 'Delete Section',
+                text: `Are you sure you want to delete the section "${sectionName}"? This will remove all student enrollments and assignment links to this section. This action cannot be undone.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, delete it',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = "{{ url_for('teacher.delete_section', section_id=0) }}".replace('0', sectionId);
+                }
+            });
+        });
+    });
+});
+</script>
 {% endblock %} 

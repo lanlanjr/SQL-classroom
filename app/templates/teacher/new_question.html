@@ -77,7 +77,7 @@
                     <label for="db_type" class="form-label">Database Type</label>
                     <select class="form-select" id="db_type" name="db_type" required onchange="switchDbType(this.value)">
                         <option value="sqlite">In-memory SQLite (with schema)</option>
-                        <option value="mysql">MySQL (existing database)</option>
+                        <option value="mysql" selected>MySQL (existing database)</option>
                         <option value="imported_schema">Imported Schema</option>
                     </select>
                 </div>
@@ -127,7 +127,7 @@
             </div>
             
             <div class="mb-3 form-check">
-                <input type="checkbox" class="form-check-input" id="disable_copy_paste" name="disable_copy_paste">
+                <input type="checkbox" class="form-check-input" id="disable_copy_paste" name="disable_copy_paste" checked>
                 <label class="form-check-label" for="disable_copy_paste">Disable copy and paste in SQL editor</label>
                 <div class="form-text">When enabled, students cannot copy and paste text in the SQL editor for this question.</div>
             </div>
