@@ -1658,6 +1658,10 @@ def preview_question():
             return jsonify({'error': f'Invalid schema import ID: {str(e)}'}), 400
     
     try:
+        # Validate the query to ensure only DQL operations are allowed
+        from app.utils import validate_dql_only_query
+        validate_dql_only_query(query)
+        
         # Handle different database types
         if db_type == 'mysql' or db_type == 'imported_schema':
             try:
@@ -2267,6 +2271,39 @@ def duplicate_section_assignment(section_id, assignment_id):
     
     return redirect(url_for('teacher.view_section', section_id=section.id))
 
+@teacher.route('/submission/<int:submission_id>/delete', methods=['POST'])
+@login_required
+@teacher_required
+@csrf.exempt
+def delete_submission(submission_id):
+    """Delete a student's submission so they can re-answer the question."""
+    submission = Submission.query.get_or_404(submission_id)
+    
+    # Get the assignment to verify teacher ownership
+    assignment = Assignment.query.get_or_404(submission.assignment_id)
+    
+    # Make sure the teacher owns this assignment
+    if assignment.creator_id != current_user.id:
+        flash('You can only manage submissions for your own assignments.', 'danger')
+        return redirect(url_for('teacher.assignments'))
+    
+    # Get student and question info for the flash message
+    student = User.query.get(submission.student_id)
+    question = Question.query.get(submission.question_id)
+    
+    try:
+        # Delete the submission
+        db.session.delete(submission)
+        db.session.commit()
+        
+        flash(f'Submission deleted successfully! {student.username if student else "Student"} can now re-answer "{question.title if question else "the question"}".', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting submission: {str(e)}', 'danger')
+    
+    # Return to the assignment view
+    return redirect(url_for('teacher.view_assignment', assignment_id=assignment.id))
+
 @teacher.route('/student/<int:student_id>/reset_password', methods=['POST'])
 @login_required
 @teacher_required
@@ -2334,7 +2371,11 @@ def playground_execute():
     database_name = data['database_name'].strip()
     
     try:
-        # Teachers can execute a wider range of queries than students
+        # Validate the query to ensure only DQL operations are allowed
+        from app.utils import validate_dql_only_query
+        validate_dql_only_query(query)
+        
+        # Teachers now have the same query restrictions as students for security
         try:
             # Connect to MySQL using the provided database name
             conn = pymysql.connect(

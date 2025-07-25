@@ -8,7 +8,11 @@ SQL Classroom is a web-based application designed for teaching and learning SQL 
 - Improved logout functionality with prevention of back-button access
 - Added cache control headers for authenticated pages
 - Implemented restricted MySQL user (sql_student) with limited permissions
-- Added validation for student SQL queries
+- **NEW: Comprehensive DQL-only restrictions** - Both teachers and students are now restricted to Data Query Language (DQL) operations only:
+  - **Allowed**: SELECT statements, SHOW commands, DESCRIBE, EXPLAIN
+  - **Forbidden**: DDL (CREATE, DROP, ALTER), DML (INSERT, UPDATE, DELETE), DCL (GRANT, REVOKE), TCL (COMMIT, ROLLBACK)
+  - Added robust query validation to prevent any database modification operations
+  - File operations and system schema access are blocked for security
 
 ### 2. Multiple Classroom Support
 Students can now be enrolled in multiple classrooms simultaneously:
@@ -209,6 +213,12 @@ The application will be available at http://localhost:5000
 - Passwords are hashed using bcrypt
 - SQL queries are executed in isolated environments
 - Restricted MySQL user permissions for student queries (using sql_student account)
+- **Comprehensive DQL-only restrictions**: Both teachers and students are limited to Data Query Language operations only
+  - Only SELECT, SHOW, DESCRIBE, EXPLAIN commands are allowed
+  - All DDL (CREATE, DROP, ALTER), DML (INSERT, UPDATE, DELETE), DCL (GRANT, REVOKE), and TCL (COMMIT, ROLLBACK) operations are forbidden
+  - File operations (INTO OUTFILE, LOAD DATA) are blocked
+  - System schema access (INFORMATION_SCHEMA, mysql) is restricted
+  - SQL comments and multiple statements are prevented to avoid injection attacks
 - Cache control headers prevent authenticated page access after logout
 - Form validation protects against common vulnerabilities
 

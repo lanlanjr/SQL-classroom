@@ -192,7 +192,7 @@
                     <div class="mb-3">
                         <label for="sql-editor" class="form-label">SQL Query</label>
                         <textarea id="sql-editor" class="form-control"></textarea>
-                        <div class="form-text">Write your SQL query here. Only SELECT queries are allowed.</div>
+                        <div class="form-text">Write your SQL query here. Only DQL (Data Query Language) operations are allowed - SELECT statements and information queries like SHOW, DESCRIBE, EXPLAIN.</div>
                     </div>
                     
                     <div class="d-flex justify-content-between">
@@ -264,7 +264,8 @@
                     <li>You can run <code>SHOW DATABASES;</code> to see available databases.</li>
                     <li>Use <code>SHOW TABLES;</code> to see tables in the selected database.</li>
                     <li>Run <code>DESCRIBE table_name;</code> to see a table's structure.</li>
-                    <li>Only SELECT queries and information queries are allowed.</li>
+                    <li>Only DQL (Data Query Language) operations are allowed: SELECT, SHOW, DESCRIBE, EXPLAIN.</li>
+                    <li>DDL, DML, DCL, and TCL operations are forbidden for security reasons.</li>
                     <li>Your queries are validated for security purposes.</li>
                 </ul>
             </div>

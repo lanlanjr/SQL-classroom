@@ -3,6 +3,10 @@
 
 # Python cache files
 **/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+__pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/

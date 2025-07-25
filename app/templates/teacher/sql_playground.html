@@ -180,7 +180,7 @@
                     <div class="mb-3">
                         <label for="sql-editor" class="form-label">SQL Query</label>
                         <textarea id="sql-editor" class="form-control"></textarea>
-                        <div class="form-text" id="query-help-text">Write your SQL query here. As a teacher, you have access to all SQL operations including SELECT, INSERT, UPDATE, DELETE, and schema operations.</div>
+                        <div class="form-text" id="query-help-text">Write your SQL query here. For security reasons, only SELECT and information queries (SHOW, DESCRIBE, EXPLAIN) are allowed. DDL, DML, DCL, and TCL operations are forbidden.</div>
                     </div>
                     
                     <div class="d-flex justify-content-between">
@@ -245,21 +245,21 @@
 
         <div class="card shadow">
             <div class="card-header bg-light">
-                <h5 class="mb-0">Teacher SQL Reference</h5>
+                <h5 class="mb-0">SQL Query Reference</h5>
             </div>
             <div class="card-body">
-                <h6>Query Templates</h6>
+                <h6>Allowed Query Templates</h6>
                 <div class="list-group mb-3">
                     <button class="list-group-item list-group-item-action template-btn" data-template="SHOW DATABASES;">Show all databases</button>
                     <button class="list-group-item list-group-item-action template-btn" data-template="SHOW TABLES;">Show all tables</button>
                     <button class="list-group-item list-group-item-action template-btn" data-template="DESCRIBE table_name;">Describe table structure</button>
                     <button class="list-group-item list-group-item-action template-btn" data-template="SELECT * FROM table_name LIMIT 10;">Select data from table</button>
-                    <button class="list-group-item list-group-item-action template-btn" data-template="CREATE TABLE new_table (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);">Create table template</button>
-                    <button class="list-group-item list-group-item-action template-btn" data-template="INSERT INTO table_name (column1, column2) VALUES ('value1', 'value2');">Insert data template</button>
+                    <button class="list-group-item list-group-item-action template-btn" data-template="SELECT column1, column2 FROM table_name WHERE condition;">Select with conditions</button>
+                    <button class="list-group-item list-group-item-action template-btn" data-template="SELECT COUNT(*) FROM table_name;">Count records</button>
+                    <button class="list-group-item list-group-item-action template-btn" data-template="SHOW CREATE TABLE table_name;">Show table creation statement</button>
+                </div>
+                <div class="alert alert-warning">
+                    <strong>Security Notice:</strong> Only DQL (Data Query Language) operations are allowed. This includes SELECT statements and database information commands like SHOW, DESCRIBE, and EXPLAIN. DDL, DML, DCL, and TCL operations are forbidden for security reasons.
                 </div>
             </div>
         </div>

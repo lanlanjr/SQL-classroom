@@ -322,6 +322,15 @@
                                                                     <strong>Feedback:</strong>
                                                                     <p>{{ submission.feedback|default('No feedback provided') }}</p>
                                                                 </div>
+                                                                <div class="mt-3">
+                                                                    <button class="btn btn-sm btn-danger delete-submission-btn" 
+                                                                            data-submission-id="{{ submission.id }}"
+                                                                            data-student-name="{{ student.username }}"
+                                                                            data-question-title="{{ question.title }}">
+                                                                        <i class="fas fa-trash me-1"></i> Delete Submission
+                                                                    </button>
+                                                                    <small class="text-muted ms-2">This will allow the student to re-answer the question</small>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </td>
@@ -432,6 +441,27 @@
             if (e.key === 'Escape' && modal.style.display === 'block') {
                 modal.style.display = 'none';
             }
+        });
+        
+        // Handle delete submission buttons
+        const deleteButtons = document.querySelectorAll('.delete-submission-btn');
+        
+        deleteButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const submissionId = this.getAttribute('data-submission-id');
+                const studentName = this.getAttribute('data-student-name');
+                const questionTitle = this.getAttribute('data-question-title');
+                
+                if (confirm(`Are you sure you want to delete ${studentName}'s submission for "${questionTitle}"?\n\nThis will allow the student to re-answer the question. This action cannot be undone.`)) {
+                    // Create a form and submit it
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = `{{ url_for('teacher.delete_submission', submission_id=0) }}`.replace('0', submissionId);
+                    
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
         });
     });
 </script>

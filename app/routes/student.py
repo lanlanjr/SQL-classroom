@@ -445,55 +445,12 @@ def get_student_db_connection(question):
         raise ValueError(f"Unsupported database type: {question.db_type}")
 
 def validate_student_query(query):
-    """Validate student query for potential harmful operations"""
-    query_upper = query.upper().strip()
+    """Validate student query for potential harmful operations - DEPRECATED
     
-    # Allow specific information schema queries
-    allowed_starts = [
-        'SELECT', 
-        'SHOW TABLES',
-        'SHOW COLUMNS',
-        'SHOW FIELDS',
-        'DESCRIBE',
-        'DESC',
-        'EXPLAIN',
-        'SHOW CREATE TABLE'
-    ]
-    
-    # Check if query starts with any allowed command
-    is_allowed = any(query_upper.startswith(cmd) for cmd in allowed_starts)
-    if not is_allowed:
-        raise ValueError("Only SELECT and table information queries are allowed")
-    
-    # List of forbidden keywords that could modify database structure or data
-    forbidden_keywords = [
-        'CREATE', 'DROP', 'ALTER', 'TRUNCATE', 'RENAME',
-        'GRANT', 'REVOKE', 'ROLE',
-        'INSERT', 'UPDATE', 'DELETE',
-        'PROCEDURE', 'FUNCTION', 'TRIGGER', 'EVENT',
-        'LOAD', 'CALL', 'LOCK', 'UNLOCK',
-        'INTO OUTFILE', 'INTO DUMPFILE',  # Prevent file operations
-        'INFORMATION_SCHEMA', 'PERFORMANCE_SCHEMA',  # Restrict access to system schemas
-        # 'UNION', 'UNION ALL'  # Prevent UNION attacks
-    ]
-    
-    # Split query into words and check for forbidden keywords
-    query_words = set(query_upper.split())
-    for keyword in forbidden_keywords:
-        if keyword in query_words:
-            # Make exception for 'CREATE' in 'SHOW CREATE TABLE'
-            if keyword == 'CREATE' and 'SHOW CREATE TABLE' in query_upper:
-                continue
-            raise ValueError(f"Query contains forbidden keyword: {keyword}")
-    
-    # Additional security checks
-    if '--' in query or '#' in query:
-        raise ValueError("SQL comments are not allowed")
-    
-    if 'INTO OUTFILE' in query_upper or 'INTO DUMPFILE' in query_upper:
-        raise ValueError("File operations are not allowed")
-    
-    return True
+    This function is deprecated. Use validate_dql_only_query from app.utils instead.
+    """
+    from app.utils import validate_dql_only_query
+    return validate_dql_only_query(query)
 
 @student.route('/api/execute-query', methods=['POST'])
 @login_required
