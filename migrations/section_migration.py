@@ -36,7 +36,7 @@ def upgrade():
                 conn.execute(text("ALTER TABLE users ADD COLUMN section_id INTEGER"))
                 conn.execute(text("ALTER TABLE users ADD CONSTRAINT fk_section FOREIGN KEY (section_id) REFERENCES sections(id)"))
     
-    print("Migration completed successfully.")
+
 
 def downgrade():
     """
@@ -59,7 +59,7 @@ def downgrade():
             conn.execute(text('DROP TABLE IF EXISTS sections'))
             conn.execute(text('ALTER TABLE users DROP COLUMN IF EXISTS section_id'))
     
-    print("Downgrade completed successfully.")
+
 
 if __name__ == "__main__":
     upgrade() 

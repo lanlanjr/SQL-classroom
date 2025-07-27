@@ -36,11 +36,11 @@ def upgrade():
             {'password_hash': password_hash}
         )
         
-        print("Default admin user created:")
-        print("  Username: admin")
-        print("  Password: admin123")
-        print("  Email: admin@sqlclassroom.local")
-        print("  IMPORTANT: Please change the default password after first login!")
+
+
+
+
+
 
 def downgrade():
     """Remove admin role support"""

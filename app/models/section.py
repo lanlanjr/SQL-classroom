@@ -2,8 +2,15 @@ from app import db
 from datetime import datetime
 import secrets
 
+import logging
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+
 class Section(db.Model):
     __tablename__ = 'sections'
+    __table_args__ = {'mysql_auto_increment': 100000}
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -45,18 +52,18 @@ class Section(db.Model):
     def find_by_token(cls, token):
         """Find a section by its invitation token"""
         if not token:
-            # print(f"Empty token provided")
+            logging.debug("Empty token provided")
             return None
             
         # Get all sections to check for token match
         sections = cls.query.all()
         for section in sections:
-            # print(f"Comparing: '{token}' with '{section.invitation_token}'")
+            logging.debug(f"Comparing: '{token}' with '{section.invitation_token}'")
             if section.invitation_token and section.invitation_token == token:
-                # print(f"Found matching section: {section.name}")
+                logging.debug(f"Found matching section: {section.name}")
                 return section
-                
-        # print(f"No section found with token: {token}")
+
+        logging.debug(f"No section found with token: {token}")
         return cls.query.filter_by(invitation_token=token).first()
     
     def __repr__(self):

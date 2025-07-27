@@ -20,9 +20,9 @@ def upgrade():
             if not column_exists(conn, 'questions', 'disable_copy_paste'):
                 # Execute raw SQL to add the column using newer SQLAlchemy method
                 conn.execute(text('ALTER TABLE questions ADD COLUMN disable_copy_paste BOOLEAN NOT NULL DEFAULT 0'))
-                print("Added disable_copy_paste column to questions table")
+
             else:
-                print("Column disable_copy_paste already exists - skipping")
+
     
 def downgrade():
     # Create a Flask app context
@@ -33,13 +33,13 @@ def downgrade():
             if column_exists(conn, 'questions', 'disable_copy_paste'):
                 # Execute raw SQL to remove the column using newer SQLAlchemy method
                 conn.execute(text('ALTER TABLE questions DROP COLUMN disable_copy_paste'))
-                print("Removed disable_copy_paste column from questions table")
+
             else:
-                print("Column disable_copy_paste doesn't exist - skipping")
+
 
 def run_migration():
     upgrade()
-    print("Migration completed: disable_copy_paste column check finished")
+
 
 if __name__ == '__main__':
     run_migration() 

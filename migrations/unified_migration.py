@@ -51,9 +51,9 @@ def upgrade():
                     ADD COLUMN section_id INTEGER,
                     ADD FOREIGN KEY (section_id) REFERENCES sections(id)
                 '''))
-                print("Added section_id column to users table")
+
         except Exception as e:
-            print(f"Error adding section_id to users: {e}")
+
 
         # Add disable_copy_paste to questions table if it doesn't exist
         try:
@@ -62,9 +62,9 @@ def upgrade():
                     ALTER TABLE questions 
                     ADD COLUMN disable_copy_paste BOOLEAN NOT NULL DEFAULT 0
                 '''))
-                print("Added disable_copy_paste column to questions table")
+
         except Exception as e:
-            print(f"Error adding disable_copy_paste to questions: {e}")
+
 
         # Add first_name and last_name to users table if they don't exist
         try:
@@ -73,7 +73,7 @@ def upgrade():
                     ALTER TABLE users 
                     ADD COLUMN first_name VARCHAR(50) DEFAULT 'User'
                 '''))
-                print("Added first_name column to users table")
+
                 
                 # Update existing users to have a first name
                 conn.execute(sa.text('''
@@ -81,14 +81,14 @@ def upgrade():
                     SET first_name = username 
                     WHERE first_name IS NULL OR first_name = 'User'
                 '''))
-                print("Updated existing users with default first_name values")
+
             
             if not check_column_exists(conn, 'users', 'last_name'):
                 conn.execute(sa.text('''
                     ALTER TABLE users 
                     ADD COLUMN last_name VARCHAR(50) DEFAULT 'Account'
                 '''))
-                print("Added last_name column to users table")
+
                 
                 # Update existing users to have a last name
                 conn.execute(sa.text('''
@@ -96,10 +96,10 @@ def upgrade():
                     SET last_name = 'Account' 
                     WHERE last_name IS NULL
                 '''))
-                print("Updated existing users with default last_name values")
+
                 
         except Exception as e:
-            print(f"Error adding name fields to users: {e}")
+
 
         # Add invitation_token to sections table if it doesn't exist
         try:
@@ -108,11 +108,11 @@ def upgrade():
                     ALTER TABLE sections 
                     ADD COLUMN invitation_token VARCHAR(64) UNIQUE
                 '''))
-                print("Added invitation_token column to sections table")
-        except Exception as e:
-            print(f"Error adding invitation_token to sections: {e}")
 
-        print("All migrations completed successfully")
+        except Exception as e:
+
+
+
 
 def downgrade():
     app = create_app()
@@ -123,39 +123,39 @@ def downgrade():
         try:
             conn.execute(sa.text("ALTER TABLE users DROP COLUMN first_name"))
         except Exception as e:
-            print(f"Could not drop first_name from users: {e}")
+
             
         try:
             conn.execute(sa.text("ALTER TABLE users DROP COLUMN last_name"))
         except Exception as e:
-            print(f"Could not drop last_name from users: {e}")
+
         
         try:
             conn.execute(sa.text("ALTER TABLE users DROP FOREIGN KEY users_ibfk_2")) # Drop the foreign key first
             conn.execute(sa.text("ALTER TABLE users DROP COLUMN section_id"))
         except Exception as e:
-            print(f"Could not drop section_id from users: {e}")
+
             
         try:
             conn.execute(sa.text("ALTER TABLE questions DROP COLUMN disable_copy_paste"))
         except Exception as e:
-            print(f"Could not drop disable_copy_paste from questions: {e}")
+
             
         try:
             conn.execute(sa.text("DROP TABLE IF EXISTS section_assignments"))
         except Exception as e:
-            print(f"Could not drop section_assignments table: {e}")
+
             
         try:
             conn.execute(sa.text("DROP TABLE IF EXISTS sections"))
         except Exception as e:
-            print(f"Could not drop sections table: {e}")
+
             
-        print("Downgrade completed with possible warnings")
+
 
 def run_migration():
     upgrade()
-    print("Unified migration completed successfully")
+
 
 if __name__ == '__main__':
     run_migration() 

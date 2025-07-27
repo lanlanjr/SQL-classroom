@@ -158,55 +158,49 @@ GRANT SELECT ON *.* TO 'sql_student'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-## Testing the Application
+## Initial Setup
 
-### Using the Reset Script
+### Create Admin Account
 
-We provide two scripts for testing the application with dummy data:
+After setting up the database, you'll need to create an admin account to manage the application:
 
-1. **Reset the application to a clean state**:
+1. **Using the Flask shell**:
 ```bash
-python reset_app.py
+flask shell
 ```
-This will:
-- Reset the database to a clean state
-- Create core tables and apply migrations
-- Create an admin user (username: admin, password: password)
 
-2. **Create dummy data for testing**:
-```bash
-python create_dummy_data.py
+2. **Create an admin user**:
+```python
+from app.models import User
+from app import db
+
+admin = User(
+    username="admin",
+    email="admin@yourschool.com",
+    first_name="Admin",
+    last_name="User",
+    role="teacher"  # Admin users should have teacher role
+)
+admin.set_password("your_secure_password")
+db.session.add(admin)
+db.session.commit()
+exit()
 ```
-This will generate:
-- Sample teachers and students
-- Multiple classrooms with assignments
-- Practice questions with varying difficulty levels
-- Student enrollments across different classrooms
-
-### Testing Accounts
-
-After running the scripts, you can use these accounts:
-
-**Admin/Teacher Account**:
-- Username: admin
-- Password: password
-
-**Sample Teacher Accounts**:
-- Username: teacher1 through teacher4
-- Password: password
-
-**Sample Student Accounts**:
-- Username: student_1 through student_20
-- Password: password
 
 ### Running the Application
 
+**For Development:**
 ```bash
 python run.py
-flask run --host=0.0.0.0 --debug
 ```
 
-The application will be available at http://localhost:5000
+**For Production (using wsgi.py):**
+```bash
+gunicorn -w 4 -b 0.0.0.0:8000 wsgi:application
+```
+Or configure your web server (Apache, Nginx) to use the `wsgi.py` file.
+
+The application will be available at http://localhost:5000 (development) or your configured port (production).
 
 ## Security Considerations
 

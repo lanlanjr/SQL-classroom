@@ -4,6 +4,7 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 
 class SchemaImport(db.Model):
     __tablename__ = 'schema_imports'
+    __table_args__ = {'mysql_auto_increment': 100000}
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)

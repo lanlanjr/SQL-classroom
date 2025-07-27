@@ -3,6 +3,7 @@ from datetime import datetime
 
 class Question(db.Model):
     __tablename__ = 'questions'
+    __table_args__ = {'mysql_auto_increment': 100000}
     
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
@@ -39,7 +40,6 @@ class Question(db.Model):
         """Get the table prefix for imported schemas"""
         if self.db_type == 'imported_schema' and self.schema_import:
             prefix = self.schema_import.active_schema_name
-            print(f"[DEBUG] Question {self.id} - Schema Import ID: {self.schema_import_id}, Active Schema Name: {prefix}")
+
             return prefix
-        print(f"[DEBUG] Question {self.id} - Not imported schema or no schema import (db_type: {self.db_type}, schema_import: {self.schema_import})")
         return '' 

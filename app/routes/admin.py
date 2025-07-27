@@ -486,7 +486,7 @@ def database_analyze():
                 total_size += total_size_mb
             except (ValueError, TypeError) as e:
                 # Skip problematic rows but log the issue
-                print(f"Warning: Could not process table {row[0]}: {e}")
+
                 continue
         
         analysis_results['tables'] = tables_analysis
@@ -519,7 +519,7 @@ def database_analyze():
                     analysis_results['slow_queries'].append(query_info)
                 except (ValueError, TypeError) as e:
                     # Skip problematic query entries
-                    print(f"Warning: Could not process slow query: {e}")
+
                     continue
         except Exception:
             analysis_results['slow_queries'] = []

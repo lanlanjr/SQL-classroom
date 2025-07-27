@@ -18,6 +18,7 @@ import secrets
 import string
 import pandas as pd
 from io import StringIO
+import logging
 
 def teacher_required(f):
     @wraps(f)
@@ -187,9 +188,9 @@ def edit_question(question_id):
     if request.method == 'POST':
         try:
             # Print form data for debugging
-            print("Edit question form data received:")
-            for key, value in request.form.items():
-                print(f"{key}: {value}")
+
+            # for key, value in request.form.items():
+
         
             question.title = request.form.get('title')
             question.description = sanitize_html(request.form.get('description'))
@@ -225,7 +226,7 @@ def edit_question(question_id):
                 
                 # Validate MySQL database connection
                 try:
-                    print(f"Attempting to connect to MySQL: {mysql_db_name}")
+
                     
                     # Try to connect to the database
                     connection = pymysql.connect(
@@ -235,7 +236,7 @@ def edit_question(question_id):
                         port=int(os.environ.get('MYSQL_PORT', 3306)),
                         database=mysql_db_name
                     )
-                    print("MySQL connection successful")
+
                     connection.close()
                     
                     question.mysql_db_name = mysql_db_name
@@ -243,7 +244,6 @@ def edit_question(question_id):
                     question.schema_import_id = None
                 except Exception as e:
                     error_msg = f'Could not connect to MySQL database: {str(e)}'
-                    print(f"MySQL connection error: {str(e)}")
                     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                         return jsonify({'success': False, 'error': error_msg})
                     flash(error_msg, 'danger')
@@ -263,9 +263,9 @@ def edit_question(question_id):
                 question.mysql_db_name = None
                 question.schema_import_id = None
             
-            print("Saving question changes to database")
+
             db.session.commit()
-            print(f"Question {question.id} updated successfully")
+
             
             # Check if this is an AJAX request
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -279,7 +279,6 @@ def edit_question(question_id):
             return redirect(url_for('teacher.questions'))
         except Exception as e:
             db.session.rollback()
-            print(f"Error updating question: {str(e)}")
             
             # Check if this is an AJAX request
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -403,19 +402,19 @@ def view_assignment(assignment_id):
             student_subs = submissions_by_student[student_id]
             
             # Debug output
-            print(f"Calculating score for student {student_id} ({student.username}):")
             
             # For each correct submission, add the points for that question
             for submission in student_subs:
                 if submission.is_correct and submission.question_id in question_scores:
                     question_score = question_scores[submission.question_id]
                     student_score += question_score
-                    print(f"  Question {submission.question_id}: is_correct={submission.is_correct}, score={question_score}")
+
                 else:
-                    print(f"  Question {submission.question_id}: is_correct={submission.is_correct}, score=0")
+                    logging.debug(f"Submission {submission.id} for student {student_id} is not correct or question score not found.")
+
             
             student_scores[student_id] = student_score
-            print(f"  Total score: {student_score}/{max_score}")
+
     
     return render_template(
         'teacher/view_assignment.html',
@@ -1326,18 +1325,18 @@ def export_section_results(section_id):
             try:
                 os.unlink(temp_file.name)
             except Exception as e:
-                print(f"Error removing temporary file: {e}")
+                logging.error(f"Error deleting temporary file {temp_file.name}: {e}")
             return response
         
         return return_data
         
     except Exception as e:
-        print(f"Error generating Excel file: {e}")
+
         # Clean up temp file in case of error
         try:
             os.unlink(temp_file.name)
         except:
-            pass
+            logging.error(f"Error deleting temporary file {temp_file.name} after error: {e}")
         flash(f'Error generating Excel file. Please try again.', 'danger')
         return redirect(url_for('teacher.view_section', section_id=section.id))
 
@@ -1377,7 +1376,6 @@ def upload_image():
         else:
             return jsonify({'success': False, 'error': 'Invalid file type, must be an image'})
     except Exception as e:
-        print(f"Error uploading image: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}) 
 
 @teacher.route('/assignment/delete/<int:assignment_id>', methods=['GET'])
@@ -1568,12 +1566,12 @@ def use_schema(schema_id):
                     except pymysql.Error as e:
                         error_msg = f"Error creating table from statement {i+1}: {str(e)}"
                         debug_log.append(error_msg)
-                        print(error_msg)
+
                         # Continue with other statements
                     except Exception as e:
                         error_msg = f"Unexpected error processing CREATE TABLE {i+1}: {str(e)}"
                         debug_log.append(error_msg)
-                        print(error_msg)
+
             
             debug_log.append(f"Total CREATE TABLE statements found: {len(create_table_statements)}")
             debug_log.append(f"Total tables created: {len(created_tables)}")
@@ -1617,7 +1615,7 @@ def use_schema(schema_id):
                     except pymysql.Error as e:
                         error_msg = f"Error executing non-CREATE statement {i+1}: {str(e)}"
                         debug_log.append(error_msg)
-                        print(error_msg)
+
                         # Continue with other statements
             
             debug_log.append(f"Processed {non_create_statements} non-CREATE statements")
@@ -1641,13 +1639,13 @@ def use_schema(schema_id):
                         debug_log.append(error_msg)
                         # Don't print this as an error since it's not critical
                         if permission_errors <= 3:  # Only show first few warnings
-                            print(f"⚠️  {error_msg}")
+                            logging.warning(error_msg)
                 
                 if permissions_granted > 0:
                     debug_log.append(f"✅ Granted permissions on {permissions_granted} tables")
                 if permission_errors > 0:
                     debug_log.append(f"⚠️  Permission warnings for {permission_errors} tables (not critical)")
-                    print(f"⚠️  Note: Permission granting failed for {permission_errors} tables. This is usually due to database user privileges but doesn't affect functionality.")
+
             else:
                 debug_log.append("ℹ️  Permission granting disabled via configuration")
             
@@ -1727,30 +1725,27 @@ def delete_schema(schema_id):
                     # Disable foreign key checks to allow dropping tables with foreign key constraints
                     if tables_to_delete:
                         cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
-                        print(f"Disabled foreign key checks for deleting {len(tables_to_delete)} tables")
                     
                     # Drop each prefixed table
                     for table in tables_to_delete:
                         try:
                             cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
                             tables_deleted.append(table)
-                            print(f"Deleted table: {table}")
+
                         except Exception as e:
-                            print(f"Error deleting table {table}: {str(e)}")
-                    
+                            logging.error(f"Error dropping table {table}: {e}")
                     # Re-enable foreign key checks
                     if tables_to_delete:
                         cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
-                        print("Re-enabled foreign key checks")
+
                     
                     connection.commit()
-                    print(f"Successfully deleted {len(tables_deleted)} tables with prefix: {schema.active_schema_name}")
                 
                 connection.close()
                 
             except Exception as e:
-                print(f"Error deleting tables from sql_classroom database: {str(e)}")
                 # Continue with schema deletion even if table cleanup fails
+                logging.error(f"Error cleaning up tables for schema {schema.id}: {e}")
         
         # Delete the schema record from the database
         db.session.delete(schema)
@@ -1815,7 +1810,7 @@ def schema_monitor():
                             if result and result[0]:
                                 total_size += float(result[0])
                         except:
-                            pass
+                            logging.error(f"Error getting size for table {table} in schema {schema.name}")
                     
                     schema_stats.append({
                         'schema': schema,
@@ -2215,35 +2210,33 @@ def preview_question():
                     
                     # Modify query to use table prefixes if needed
                     table_prefix = preview_question.get_table_prefix()
-                    print(f"[DEBUG] Teacher Test - Table prefix: {table_prefix}")
+
                     
                     if table_prefix:
                         # Get all table names from the schema content
                         schema_content = preview_question.schema_import.schema_content
-                        print(f"[DEBUG] Schema content length: {len(schema_content)}")
-                        print(f"[DEBUG] Schema content preview: {schema_content[:200]}...")
+
                         
                         table_names = []
                         
                         # Parse CREATE TABLE statements to extract table names
                         from app.utils import parse_schema_statements
                         statements = parse_schema_statements(schema_content)
-                        print(f"[DEBUG] Parsed {len(statements)} statements")
                         
                         for i, stmt in enumerate(statements):
-                            print(f"[DEBUG] Statement {i}: {stmt[:100]}...")
+
                             if stmt.upper().strip().startswith('CREATE TABLE'):
-                                print(f"[DEBUG] Found CREATE TABLE statement")
+
                                 # Extract table name using the same logic as import
                                 table_start = stmt.upper().find('TABLE') + 5
                                 table_part = stmt[table_start:].strip()
-                                print(f"[DEBUG] Table part after 'TABLE': '{table_part[:50]}...'")
+
                                 table_name = table_part.split()[0].strip('`').rstrip('(').strip('`')
-                                print(f"[DEBUG] Extracted table name: '{table_name}'")
+
                                 table_names.append(table_name)
                         
-                        print(f"[DEBUG] Found table names: {table_names}")
-                        print(f"[DEBUG] Original query: {query}")
+
+
                         
                         # Replace table names with prefixed versions in the query using word boundaries
                         import re
@@ -2255,14 +2248,14 @@ def preview_question():
                             old_query = modified_query
                             modified_query = re.sub(pattern, prefixed_table, modified_query, flags=re.IGNORECASE)
                             if old_query != modified_query:
-                                print(f"[DEBUG] Replacing '{table_name}' with '{prefixed_table}': SUCCESS")
+                                logging.debug(f"Table name '{table_name}' replaced with '{prefixed_table}' in query.")
                             else:
-                                print(f"[DEBUG] No replacement made for '{table_name}' in query")
-                        
+                                logging.debug(f"No replacement made for table name '{table_name}'.")
+
                         query = modified_query
-                        print(f"[DEBUG] Modified query: {query}")
+
                     else:
-                        print("[DEBUG] No table prefix found - schema may not be deployed")
+                        logging.warning("No table prefix found for imported schema. Query may not execute as expected.")
                 
                 # Execute query and fetch results
                 with connection.cursor() as cursor:
@@ -2460,10 +2453,10 @@ def preview_question():
                                     return float_val
                                 return float_val
                             except ValueError:
-                                pass
+                                logging.debug(f"Value '{value}' is not a float or int, keeping as string.")
                         except:
                             # If conversion fails, keep as string
-                            pass
+                            logging.debug(f"Value '{value}' could not be converted, keeping as string.")
                     
                     return value
 
@@ -2752,18 +2745,18 @@ def export_assignment_results(section_id, assignment_id):
             try:
                 os.unlink(temp_file.name)
             except Exception as e:
-                print(f"Error removing temporary file: {e}")
+                logging.error(f"Error deleting temporary file {temp_file.name}: {e}")
             return response
         
         return return_data
         
     except Exception as e:
-        print(f"Error generating Excel file: {e}")
+
         # Clean up temp file in case of error
         try:
             os.unlink(temp_file.name)
         except:
-            pass
+            logging.error(f"Error deleting temporary file {temp_file.name} after error: {e}")
         flash(f'Error generating Excel file: {str(e)}', 'danger')
         return redirect(url_for('teacher.view_section', section_id=section.id))
 
@@ -2965,8 +2958,8 @@ def playground_execute():
                         schema_names = [schema.name for schema in teacher_schemas]
                         db_list += ', ' + ', '.join(schema_names) + ' (your schemas)'
                 except:
-                    pass
-                
+                    logging.error(f"Error retrieving schemas for teacher {current_user.id}: {e}")
+
                 error_msg += f' Available options: {db_list}'
                 
             return jsonify({'error': error_msg}), 403
@@ -2977,7 +2970,7 @@ def playground_execute():
             table_prefix = selected_schema.active_schema_name
             schema_content = selected_schema.schema_content
             
-            print(f"[DEBUG] Teacher Playground - Using selected schema: {selected_schema.name}, prefix: {table_prefix}")
+
             
             # Apply query rewriting using utility function
             from app.utils import rewrite_query_for_schema
@@ -3075,11 +3068,9 @@ def playground_execute():
             clean_message = error_message.replace('\n', ' ')
             return jsonify({'error': f'SQL Error: {clean_message}'}), 400
         except Exception as e:
-            print(f"MySQL query error: {str(e)}")
             return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
             
     except Exception as e:
-        print(f"Unexpected error in playground_execute: {str(e)}")
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
 @teacher.route('/api/get-available-databases', methods=['GET'])
@@ -3110,8 +3101,8 @@ def get_available_databases():
                 if schema_name not in available_databases:
                     available_databases.append(schema_name)
         except Exception as e:
-            print(f"Error checking teacher schemas: {e}")
-        
+            logging.error(f"Error retrieving schemas for teacher {current_user.id}: {e}")
+
         # If we have databases to show (either allowed or teacher schemas), return them
         if available_databases:
             available_databases.sort()
@@ -3143,5 +3134,4 @@ def get_available_databases():
         return jsonify({'databases': user_databases})
         
     except Exception as e:
-        print(f"Error fetching databases: {str(e)}")
         return jsonify({'error': str(e), 'databases': []}), 500

@@ -3,6 +3,7 @@ from datetime import datetime
 
 class Assignment(db.Model):
     __tablename__ = 'assignments'
+    __table_args__ = {'mysql_auto_increment': 100000}
     
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
@@ -21,6 +22,7 @@ class Assignment(db.Model):
 
 class AssignmentQuestion(db.Model):
     __tablename__ = 'assignment_questions'
+    __table_args__ = {'mysql_auto_increment': 100000}
     
     id = db.Column(db.Integer, primary_key=True)
     assignment_id = db.Column(db.Integer, db.ForeignKey('assignments.id'), nullable=False)

@@ -23,7 +23,7 @@ def upgrade():
                     ALTER TABLE users 
                     ADD COLUMN first_name VARCHAR(50) DEFAULT 'User'
                 '''))
-                print("Added first_name column to users table")
+
                 
                 # Update existing users to have a first name
                 conn.execute(sa.text('''
@@ -31,14 +31,14 @@ def upgrade():
                     SET first_name = username 
                     WHERE first_name IS NULL OR first_name = 'User'
                 '''))
-                print("Updated existing users with default first_name values")
+
             
             if 'last_name' not in columns:
                 conn.execute(sa.text('''
                     ALTER TABLE users 
                     ADD COLUMN last_name VARCHAR(50) DEFAULT 'Account'
                 '''))
-                print("Added last_name column to users table")
+
                 
                 # Update existing users to have a last name
                 conn.execute(sa.text('''
@@ -46,11 +46,11 @@ def upgrade():
                     SET last_name = 'Account' 
                     WHERE last_name IS NULL
                 '''))
-                print("Updated existing users with default last_name values")
+
                 
-            print("Name fields migration completed successfully")
+
         except Exception as e:
-            print(f"Error adding name fields to users: {e}")
+
 
 def downgrade():
     """Remove first_name and last_name columns from users table"""
@@ -61,17 +61,17 @@ def downgrade():
         # These operations may fail if SQLite doesn't support dropping columns
         try:
             conn.execute(sa.text("ALTER TABLE users DROP COLUMN first_name"))
-            print("Dropped first_name column from users table")
+
         except Exception as e:
-            print(f"Could not drop first_name from users: {e}")
+
             
         try:
             conn.execute(sa.text("ALTER TABLE users DROP COLUMN last_name"))
-            print("Dropped last_name column from users table")
+
         except Exception as e:
-            print(f"Could not drop last_name from users: {e}")
+
             
-        print("Name fields downgrade completed with possible warnings")
+
 
 if __name__ == '__main__':
     upgrade() 

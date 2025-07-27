@@ -2,6 +2,8 @@
 Utility functions for the SQL Classroom application.
 """
 
+import logging
+
 def validate_dql_only_query(query):
     """
     Validate that the query contains only DQL (Data Query Language) commands.
@@ -362,7 +364,7 @@ def process_show_tables_result_for_schema(columns, data, database_name, user_id,
                 if matching_schema and matching_tables:
                     return _format_show_tables_result(matching_schema, matching_tables)
         except Exception as e:
-            print(f"Error processing student schema context: {e}")
+            logging.error(f"Error processing student schema context: {e}")
     
     # Fall back to user-based lookup (for teachers)
     active_schemas = SchemaImport.query.filter_by(created_by=user_id).filter(
@@ -478,8 +480,9 @@ def rewrite_query_for_schema(query, schema_content, table_prefix):
             table_name = table_part.split()[0].strip('`').rstrip('(').strip('`')
             table_names.append(table_name)
     
-    print(f"[DEBUG] Query rewriting - Found table names: {table_names}")
-    print(f"[DEBUG] Query rewriting - Original query: {query}")
+    logging.debug(f"Query rewriting - Found table names: {table_names}")
+    logging.debug(f"Query rewriting - Original query: {query}")
+    
     
     # Apply query rewriting
     import re
@@ -491,16 +494,16 @@ def rewrite_query_for_schema(query, schema_content, table_prefix):
         old_query = modified_query
         modified_query = re.sub(backticked_pattern, f"`{prefixed_table}`", modified_query, flags=re.IGNORECASE)
         if old_query != modified_query:
-            print(f"[DEBUG] Query rewriting - Replaced backticked '{table_name}' with '{prefixed_table}'")
-        
+            logging.debug(f"Query rewriting - Replaced backticked '{table_name}' with '{prefixed_table}'")
+
         # Then replace non-backticked table names with word boundaries
         word_boundary_pattern = r'\b' + re.escape(table_name) + r'\b'
         old_query = modified_query
         modified_query = re.sub(word_boundary_pattern, f"`{prefixed_table}`", modified_query, flags=re.IGNORECASE)
         if old_query != modified_query:
-            print(f"[DEBUG] Query rewriting - Replaced non-backticked '{table_name}' with '{prefixed_table}'")
-    
-    print(f"[DEBUG] Query rewriting - Final query: {modified_query}")
+            logging.debug(f"Query rewriting - Replaced non-backticked '{table_name}' with '{prefixed_table}'")
+
+    logging.debug(f"Query rewriting - Final query: {modified_query}")
     return modified_query
 
 
@@ -582,7 +585,7 @@ def filter_show_databases_result_for_user(columns, rows, user):
             if schema_name not in available_databases:
                 available_databases.append(schema_name)
     except Exception as e:
-        print(f"Error checking user schemas: {e}")
+        logging.error(f"Error checking user schemas: {e}")
     
     # If no databases are available, return original results (fallback)
     if not available_databases:
@@ -608,3 +611,41 @@ def filter_show_databases_result_for_user(columns, rows, user):
             filtered_rows.append([schema_name])
     
     return columns, filtered_rows
+
+
+def ensure_six_digit_auto_increment(table_name, engine):
+    """
+    Utility function to ensure a table has AUTO_INCREMENT starting from 100000
+    for 6-digit IDs. This should be called after creating new tables.
+    
+    Args:
+        table_name (str): Name of the table to update
+        engine: SQLAlchemy engine instance
+    """
+    try:
+        with engine.connect() as conn:
+            # Get current max ID
+            result = conn.execute(f"SELECT MAX(id) FROM {table_name}")
+            max_id = result.scalar() or 0
+            
+            # Set AUTO_INCREMENT to the higher of current max+1 or 100000
+            new_auto_increment = max(max_id + 1, 100000)
+            
+            # Update AUTO_INCREMENT
+            conn.execute(f"ALTER TABLE {table_name} AUTO_INCREMENT = {new_auto_increment}")
+            conn.commit()
+            
+            logging.info(f"Updated {table_name} AUTO_INCREMENT to {new_auto_increment}")
+            
+    except Exception as e:
+        logging.error(f"Error updating {table_name} AUTO_INCREMENT: {str(e)}")
+
+
+def get_six_digit_table_args():
+    """
+    Returns the standard table arguments for ensuring 6-digit IDs in new models.
+    
+    Returns:
+        dict: Table arguments with mysql_auto_increment set to 100000
+    """
+    return {'mysql_auto_increment': 100000}

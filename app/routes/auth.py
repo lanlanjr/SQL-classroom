@@ -6,63 +6,15 @@ from app.models import User, Section, StudentEnrollment
 from flask_login import user_logged_in
 from flask import current_app, jsonify
 import os
+import logging
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
 
 auth = Blueprint('auth', __name__)
 
-# Debug route - only available in development mode
-@auth.route('/debug/tokens')
-def debug_tokens():
-    # Only allow in development mode
-    if os.environ.get('APP_ENV') != 'development' and not current_app.debug:
-        return "Not available in production", 403
-        
-    # Get all tokens
-    sections = Section.query.all()
-    
-    # Create a test section if no sections exist
-    if not sections:
-        # Find a teacher user, or create one if needed
-        teacher = User.query.filter_by(role='teacher').first()
-        if not teacher:
-            teacher = User(username='teacher', email='teacher@example.com', role='teacher')
-            teacher.set_password('password')
-            db.session.add(teacher)
-            db.session.commit()
-        
-        # Create a test section
-        test_section = Section(
-            name='Test Section',
-            description='A test section created for debugging',
-            creator_id=teacher.id
-        )
-        db.session.add(test_section)
-        db.session.commit()
-        
-        # Reload sections
-        sections = Section.query.all()
-    
-    result = {}
-    
-    for section in sections:
-        # Generate a token if needed
-        if not section.invitation_token:
-            token = section.generate_invitation_token()
-            db.session.commit()
-        else:
-            token = section.invitation_token
-            
-        # Create URLs
-        register_url = url_for('auth.register_with_token', token=token, _external=True)
-        join_url = url_for('auth.join_section', token=token, _external=True)
-        
-        result[section.name] = {
-            'id': section.id,
-            'token': token,
-            'register_url': register_url,
-            'join_url': join_url
-        }
-    
-    return jsonify(result)
+auth = Blueprint('auth', __name__)
 
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
@@ -186,8 +138,8 @@ def register_with_token(token):
         return redirect(url_for('main.index'))
     
     # Debug output
-    # print(f"Token received: '{token}'")
-    
+    logging.debug(f"Token received: '{token}'")
+
     # Find section by token
     section = Section.find_by_token(token)
     if not section:
@@ -263,9 +215,8 @@ def join_section_form():
 @auth.route('/join/<token>')
 def join_section(token):
     """For existing users to join a section using a token"""
-    # Debug output
-    # print(f"Join section token received: '{token}'")
-    
+    logging.debug(f"Join section token received: '{token}'")
+
     if not current_user.is_authenticated:
         # Store the token in session and redirect to login
         session['invitation_token'] = token

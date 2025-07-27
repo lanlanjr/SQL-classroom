@@ -11,6 +11,8 @@ import json
 import uuid
 import os
 from flask import session
+import logging
+# logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 student = Blueprint('student', __name__, url_prefix='/student')
 
@@ -93,9 +95,9 @@ def dashboard():
     
     # Get the assignments
     assignments = Assignment.query.filter(Assignment.id.in_(valid_assignment_ids)).all()
-    
-    print(f"Total assignments found for section {current_section.id}: {len(assignments)}")
-    
+
+    logging.debug(f"Total assignments found for section {current_section.id}: {len(assignments)}")
+
     # Get submission stats for each assignment
     assignment_stats = {}
     completed_assignments = 0
@@ -138,16 +140,16 @@ def dashboard():
         # Check if this assignment is completed - all questions must have submissions
         if question_count > 0 and len(submitted_question_ids) == question_count:
             completed_assignments += 1
-            print(f"Assignment {assignment.id} '{assignment.title}' is COMPLETED")
+            logging.debug(f"Assignment {assignment.id} '{assignment.title}' is COMPLETED")
         else:
-            print(f"Assignment {assignment.id} '{assignment.title}' is NOT completed:")
-            print(f"  Question count: {question_count}")
-            print(f"  Unique submitted questions: {len(submitted_question_ids)}")
-            print(f"  Question IDs: {question_ids}")
-            print(f"  Submitted Question IDs: {submitted_question_ids}")
-    
-    print(f"Total completed assignments: {completed_assignments}")
-    
+            logging.debug(f"Assignment {assignment.id} '{assignment.title}' is NOT completed:")
+            logging.debug(f"  Question count: {question_count}")
+            logging.debug(f"  Unique submitted questions: {len(submitted_question_ids)}")
+            logging.debug(f"  Question IDs: {question_ids}")
+            logging.debug(f"  Submitted Question IDs: {submitted_question_ids}")
+
+    logging.debug(f"Total completed assignments: {completed_assignments}")
+
     # Get current time for checking due dates
     now = datetime.now()
     
@@ -227,10 +229,10 @@ def view_assignment(assignment_id):
     question_ids = [aq.question_id for aq in assignment_questions]
     
     # Debug: Print assignment questions and scores
-    print(f"Assignment {assignment.id} '{assignment.title}' questions:")
+    logging.debug(f"Assignment {assignment.id} '{assignment.title}' questions:")
     for aq in assignment_questions:
-        print(f"  Question ID: {aq.question_id}, Score: {aq.score}")
-    
+        logging.debug(f"  Question ID: {aq.question_id}, Score: {aq.score}")
+
     # Create a mapping of question_id to assignment_question for easy access to scores
     question_assignment_map = {aq.question_id: aq for aq in assignment_questions}
     
@@ -241,11 +243,10 @@ def view_assignment(assignment_id):
     ).all()
     
     # Debug: Print all submissions found
-    print(f"Found {len(submissions)} submissions for student {current_user.id} on assignment {assignment.id}:")
+    logging.debug(f"Found {len(submissions)} submissions for student {current_user.id} on assignment {assignment.id}:")
     for sub in submissions:
-        print(f"  Submission ID: {sub.id}, Question ID: {sub.question_id}, is_correct: {sub.is_correct}")
-    
-    # Only keep submissions for questions that are still part of the assignment
+        logging.debug(f"  Submission ID: {sub.id}, Question ID: {sub.question_id}, is_correct: {sub.is_correct}")
+            # Only keep submissions for questions that are still part of the assignment
     valid_submissions = [s for s in submissions if s.question_id in question_ids]
     
     # For each question, keep only the most recent submission
@@ -256,19 +257,19 @@ def view_assignment(assignment_id):
             submissions_by_question[question_id] = submission
     
     # Debug: Print submissions_by_question
-    print(f"Final submissions_by_question for calculating points:")
+    logging.debug(f"Final submissions_by_question for calculating points:")
     for q_id, sub in submissions_by_question.items():
-        print(f"  Question ID: {q_id}, is_correct: {sub.is_correct}, score in map: {question_assignment_map[q_id].score if q_id in question_assignment_map else 'N/A'}")
+        logging.debug(f"  Question ID: {q_id}, is_correct: {sub.is_correct}, score in map: {question_assignment_map[q_id].score if q_id in question_assignment_map else 'N/A'}")
     
     # Calculate earned points for debugging
     debug_earned_points = 0
     for aq in assignment_questions:
         if aq.question_id in submissions_by_question and submissions_by_question[aq.question_id].is_correct:
             debug_earned_points += aq.score
-            print(f"  Adding {aq.score} points for correct question {aq.question_id}")
-    
-    print(f"Total debug earned points: {debug_earned_points} out of {sum(aq.score for aq in assignment_questions)} possible")
-    
+            logging.debug(f"  Adding {aq.score} points for correct question {aq.question_id}")
+
+    logging.debug(f"Total debug earned points: {debug_earned_points} out of {sum(aq.score for aq in assignment_questions)} possible")
+
     # Pre-calculate earned points to pass to template
     earned_points = 0
     for aq in assignment_questions:
@@ -445,7 +446,7 @@ def get_student_db_connection(question):
             return conn
             
         except Exception as e:
-            print(f"Error connecting to database: {str(e)}")
+            logging.error(f"Error connecting to database: {str(e)}")
             if "Access denied" in str(e):
                 raise ValueError(f"Access denied to database. Please contact your teacher.")
             raise
@@ -491,53 +492,53 @@ def execute_query():
     # For imported schemas, modify the query to use prefixed table names
     if question.db_type == 'imported_schema':
         table_prefix = question.get_table_prefix()
-        print(f"[DEBUG] Schema Import - Table prefix: {table_prefix}")
-        
+        logging.debug(f"Schema Import - Table prefix: {table_prefix}")
+
         if table_prefix:
             # Get all table names from the schema content
             schema_content = question.schema_import.schema_content
-            print(f"[DEBUG] Schema content length: {len(schema_content)}")
-            print(f"[DEBUG] Schema content preview: {schema_content[:200]}...")
+            logging.debug(f"Schema content length: {len(schema_content)}")
+            logging.debug(f"Schema content preview: {schema_content[:200]}...")
             
             table_names = []
             
             # Parse CREATE TABLE statements to extract table names using utility function
             from app.utils import parse_schema_statements
             statements = parse_schema_statements(schema_content)
-            print(f"[DEBUG] Parsed {len(statements)} statements")
-            
+            logging.debug(f"Parsed {len(statements)} statements")
+
             for i, stmt in enumerate(statements):
-                print(f"[DEBUG] Statement {i}: {stmt[:100]}...")
+                logging.debug(f"Statement {i}: {stmt[:100]}...")
                 if stmt.upper().strip().startswith('CREATE TABLE'):
-                    print(f"[DEBUG] Found CREATE TABLE statement")
+                    logging.debug(f"Found CREATE TABLE statement")
                     # Extract table name using the same logic as import
                     table_start = stmt.upper().find('TABLE') + 5
                     table_part = stmt[table_start:].strip()
-                    print(f"[DEBUG] Table part after 'TABLE': '{table_part[:50]}...'")
+                    logging.debug(f"Table part after 'TABLE': '{table_part[:50]}...'")
                     table_name = table_part.split()[0].strip('`').rstrip('(').strip('`')
-                    print(f"[DEBUG] Extracted table name: '{table_name}'")
+                    logging.debug(f"Extracted table name: '{table_name}'")
                     table_names.append(table_name)
-            
-            print(f"[DEBUG] Found table names: {table_names}")
-            print(f"[DEBUG] Original query: {query}")
-            
+
+            logging.debug(f"Found table names: {table_names}")
+            logging.debug(f"Original query: {query}")
+
             # Replace table names with prefixed versions in the query using word boundaries
             from app.utils import rewrite_query_for_schema
             query = rewrite_query_for_schema(query, schema_content, table_prefix)
         else:
-            print("[DEBUG] No table prefix found - schema may not be deployed")
+            logging.debug("No table prefix found - schema may not be deployed")
     else:
-        print(f"[DEBUG] Not an imported schema - db_type: {question.db_type}")
-    
+        logging.debug(f"Not an imported schema - db_type: {question.db_type}")
+
     try:
         # Handle different database types
         if question.uses_mysql():  # This covers both 'mysql' and 'imported_schema'
             try:
                 # Validate the query first
                 validate_student_query(query)
-                
-                print(f"Executing MySQL query: {query}")
-                
+
+                logging.debug(f"Executing MySQL query: {query}")
+
                 # Get restricted connection
                 conn = get_student_db_connection(question)
                 
@@ -626,13 +627,13 @@ def execute_query():
                 clean_message = error_message.replace('\n', ' ')
                 return jsonify({'error': f'SQL Error: {clean_message}'}), 400
             except Exception as e:
-                print(f"MySQL query error: {str(e)}")
+                logging.error(f"MySQL query error: {str(e)}")
                 return jsonify({'error': str(e)}), 400
             
         elif question.db_type == 'sqlite':
             # SQLite - Create a fresh in-memory database for each query execution
             try:
-                print(f"Creating fresh SQLite in-memory database for query execution")
+                logging.debug("Creating fresh SQLite in-memory database for query execution")
                 # Create SQLAlchemy in-memory engine with thread safety settings
                 engine = create_engine('sqlite:///:memory:', 
                                        connect_args={'check_same_thread': False})
@@ -640,7 +641,7 @@ def execute_query():
                 # Create a new connection and load the schema
                 with engine.connect() as conn:
                     # Load schema
-                    print(f"Loading schema: {question.sample_db_schema[:100]}...")
+                    logging.debug(f"Loading schema: {question.sample_db_schema[:100]}...")
                     schema_statements = question.sample_db_schema.split(';')
                     trans = conn.begin()
                     try:
@@ -649,18 +650,18 @@ def execute_query():
                                 try:
                                     conn.execute(text(statement))
                                 except Exception as e:
-                                    print(f"Error executing schema statement: {statement}\nError: {str(e)}")
+                                    logging.error(f"Error executing schema statement: {statement}\nError: {str(e)}")
                                     trans.rollback()
                                     return jsonify({'error': f'Error in schema: {str(e)}'}), 500
                         trans.commit()
                     except Exception as e:
                         trans.rollback()
-                        print(f"Error in schema transaction: {str(e)}")
+                        logging.error(f"Error in schema transaction: {str(e)}")
                         return jsonify({'error': f'Error in schema: {str(e)}'}), 500
                 
                     # Execute the query in a separate transaction
-                    print(f"Executing SQLite query: {query}")
-                    
+                    logging.debug(f"Executing SQLite query: {query}")
+
                     # Check if it's a PRAGMA query
                     is_pragma = query.strip().upper().startswith('PRAGMA')
                     # Check if it's a SELECT query
@@ -678,7 +679,7 @@ def execute_query():
                                 'columns': columns,
                                 'data': data
                             }
-                            print(f"Query returned {len(data)} rows with {len(columns)} columns")
+                            logging.debug(f"Query returned {len(data)} rows with {len(columns)} columns")
                             return jsonify(result)
                         else:
                             # Execute non-SELECT query
@@ -691,18 +692,18 @@ def execute_query():
                                     'columns': ['Result'],
                                     'data': [[f"{rowcount} row(s) affected"]]
                                 }
-                                print(f"Non-SELECT query affected {rowcount} rows")
+                                logging.debug(f"Non-SELECT query affected {rowcount} rows")
                                 return jsonify(result)
                             except Exception as e:
                                 trans.rollback()
                                 raise e
                     except Exception as e:
-                        print(f"Error executing query: {str(e)}")
+                        logging.error(f"Error executing query: {str(e)}")
                         raise e
                     
             except sqlite3.OperationalError as e:
                 error_msg = str(e).replace('\n', ' ')
-                print(f"SQLite operational error: {error_msg}")
+                logging.error(f"SQLite operational error: {error_msg}")
                 if "syntax error" in error_msg.lower():
                     return jsonify({'error': 'SQL Syntax Error: Please check your query syntax'}), 400
                 elif "no such column" in error_msg.lower():
@@ -713,7 +714,7 @@ def execute_query():
                     return jsonify({'error': f'SQL Error: {error_msg}'}), 400
             except Exception as e:
                 error_msg = str(e).replace('\n', ' ')
-                print(f"General SQLite error: {error_msg}")
+                logging.error(f"General SQLite error: {error_msg}")
                 # Look for common SQLAlchemy error patterns
                 if "syntax error" in error_msg.lower():
                     return jsonify({'error': 'SQL Syntax Error: Please check your query syntax'}), 400
@@ -726,7 +727,7 @@ def execute_query():
         else:
             return jsonify({'error': f'Unsupported database type: {question.db_type}'}), 400
     except Exception as e:
-        print(f"Unexpected error in execute_query: {str(e)}")
+        logging.error(f"Unexpected error in execute_query: {str(e)}")
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
 @student.route('/api/submit-answer', methods=['POST'])
@@ -756,27 +757,27 @@ def submit_answer():
     
     if question.db_type == 'imported_schema':
         table_prefix = question.get_table_prefix()
-        print(f"[DEBUG] Submit Answer - Schema Import - Table prefix: {table_prefix}")
-        
+        logging.debug(f"Submit Answer - Schema Import - Table prefix: {table_prefix}")
+
         if table_prefix:
             # Get all table names from the schema content
             schema_content = question.schema_import.schema_content
-            print(f"[DEBUG] Submit Answer - Schema content length: {len(schema_content)}")
-            
+            logging.debug(f"Submit Answer - Schema content length: {len(schema_content)}")
+
             # Replace table names with prefixed versions in both queries
             from app.utils import rewrite_query_for_schema
-            
-            print(f"[DEBUG] Submit Answer - Original student query: {student_query}")
+
+            logging.debug(f"Submit Answer - Original student query: {student_query}")
             student_query = rewrite_query_for_schema(student_query, schema_content, table_prefix)
-            print(f"[DEBUG] Submit Answer - Rewritten student query: {student_query}")
-            
-            print(f"[DEBUG] Submit Answer - Original teacher query: {teacher_query}")
+            logging.debug(f"Submit Answer - Rewritten student query: {student_query}")
+
+            logging.debug(f"Submit Answer - Original teacher query: {teacher_query}")
             teacher_query = rewrite_query_for_schema(teacher_query, schema_content, table_prefix)
-            print(f"[DEBUG] Submit Answer - Rewritten teacher query: {teacher_query}")
+            logging.debug(f"Submit Answer - Rewritten teacher query: {teacher_query}")
         else:
-            print("[DEBUG] Submit Answer - No table prefix found - schema may not be deployed")
+            logging.debug("Submit Answer - No table prefix found - schema may not be deployed")
     else:
-        print(f"[DEBUG] Submit Answer - Not an imported schema - db_type: {question.db_type}")
+        logging.debug(f"Submit Answer - Not an imported schema - db_type: {question.db_type}")
 
     try:
         # Different handling based on database type
@@ -876,19 +877,19 @@ def submit_answer():
                     
                 except Exception as e:
                     db.session.rollback()
-                    print(f"Database error when saving submission: {str(e)}")
+                    logging.error(f"Database error when saving submission: {str(e)}")
                     return jsonify({'error': f'Error saving your submission: {str(e)}'}), 500
                 
             except ValueError as e:
                 return jsonify({'error': str(e)}), 400
             except Exception as e:
-                print(f"MySQL grading error: {str(e)}")
+                logging.error(f"MySQL grading error: {str(e)}")
                 return jsonify({'error': str(e)}), 400
                 
         elif question.db_type == 'sqlite':
             # SQLite grading using SQLAlchemy
             try:
-                print(f"Grading SQLite query: student={query[:50]}..., teacher={question.correct_answer[:50]}...")
+                logging.debug(f"Grading SQLite query: student={query[:50]}..., teacher={question.correct_answer[:50]}...")
                 engine = create_engine('sqlite:///:memory:', 
                                      connect_args={'check_same_thread': False})
                 
@@ -902,13 +903,13 @@ def submit_answer():
                                 try:
                                     conn.execute(text(statement))
                                 except Exception as e:
-                                    print(f"Error in schema: {statement}\nError: {str(e)}")
+                                    logging.error(f"Error in schema: {statement}\nError: {str(e)}")
                                     trans.rollback()
                                     return jsonify({'error': f'Error in database schema: {str(e)}'}), 400
                         trans.commit()
                     except Exception as e:
                         trans.rollback()
-                        print(f"Error in schema transaction: {str(e)}")
+                        logging.error(f"Error in schema transaction: {str(e)}")
                         return jsonify({'error': f'Error in database schema: {str(e)}'}), 400
                     
                     # Execute student query
@@ -984,17 +985,17 @@ def submit_answer():
                         
                     except Exception as e:
                         db.session.rollback()
-                        print(f"Database error when saving submission: {str(e)}")
+                        logging.error(f"Database error when saving submission: {str(e)}")
                         return jsonify({'error': f'Error saving your submission: {str(e)}'}), 500
                         
             except Exception as e:
-                print(f"SQLite grading error: {str(e)}")
+                logging.error(f"SQLite grading error: {str(e)}")
                 return jsonify({'error': f'Database error: {str(e)}'}), 400
         else:
             return jsonify({'error': f'Unsupported database type: {question.db_type}'}), 400
     
     except Exception as e:
-        print(f"Unexpected error in submit_answer: {str(e)}")
+        logging.error(f"Unexpected error in submit_answer: {str(e)}")
         return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
 
 @student.route('/api/check-assignment-status/<int:assignment_id>', methods=['GET'])
@@ -1138,7 +1139,7 @@ def get_active_assignments():
         })
         
     except Exception as e:
-        print(f"Error fetching active assignments: {str(e)}")
+        logging.error(f"Error fetching active assignments: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @student.route('/switch_section/<int:section_id>')
@@ -1247,8 +1248,8 @@ def playground_execute():
                         selected_schema = teacher_schema
                         actual_database_name = 'sql_classroom'  # Connect to sql_classroom for schema access
             except Exception as e:
-                print(f"Error checking teacher schema access: {e}")
-        
+                logging.error(f"Error checking teacher schema access: {e}")
+
         # Allow access if it's an allowed database OR teacher schema access
         if not (is_allowed_database or is_teacher_schema_access):
             # Get list of allowed databases for error message
@@ -1280,9 +1281,9 @@ def playground_execute():
             # Use the selected schema for query rewriting
             table_prefix = selected_schema.active_schema_name
             schema_content = selected_schema.schema_content
-            
-            print(f"[DEBUG] Playground - Using selected schema: {selected_schema.name}, prefix: {table_prefix}")
-            
+
+            logging.debug(f"Playground - Using selected schema: {selected_schema.name}, prefix: {table_prefix}")
+
             # Apply query rewriting using utility function
             from app.utils import rewrite_query_for_schema
             query = rewrite_query_for_schema(query, schema_content, table_prefix)
@@ -1376,14 +1377,14 @@ def playground_execute():
             clean_message = error_message.replace('\n', ' ')
             return jsonify({'error': f'SQL Error: {clean_message}'}), 400
         except Exception as e:
-            print(f"MySQL query error: {str(e)}")
+            logging.error(f"MySQL query error: {str(e)}")
             return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
             
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
-        print(f"Unexpected error in playground_execute: {str(e)}")
-        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500 
+        logging.error(f"Unexpected error in playground_execute: {str(e)}")
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
 @student.route('/api/get-available-databases', methods=['GET'])
 @login_required
@@ -1419,8 +1420,8 @@ def get_available_databases():
                         if schema_name not in available_databases:
                             available_databases.append(schema_name)
             except Exception as e:
-                print(f"Error checking teacher schemas: {e}")
-        
+                logging.error(f"Error checking teacher schemas: {e}")
+
         # If we have databases to show (either allowed or teacher schemas), return them
         if available_databases:
             available_databases.sort()
@@ -1452,5 +1453,5 @@ def get_available_databases():
         return jsonify({'databases': user_databases})
         
     except Exception as e:
-        print(f"Error fetching databases: {str(e)}")
-        return jsonify({'error': str(e), 'databases': []}), 500 
+        logging.error(f"Error fetching databases: {str(e)}")
+        return jsonify({'error': str(e), 'databases': []}), 500

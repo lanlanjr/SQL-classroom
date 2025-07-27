@@ -5,6 +5,10 @@ from datetime import datetime
 
 class StudentEnrollment(db.Model):
     __tablename__ = 'student_enrollments'
+    __table_args__ = (
+        db.UniqueConstraint('student_id', 'section_id', name='unique_student_section'),
+        {'mysql_auto_increment': 100000}
+    )
     
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -12,14 +16,12 @@ class StudentEnrollment(db.Model):
     enrolled_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     
-    # Define unique constraint so a student can't be enrolled twice in the same section
-    __table_args__ = (db.UniqueConstraint('student_id', 'section_id', name='unique_student_section'),)
-    
     def __repr__(self):
         return f"StudentEnrollment(student_id={self.student_id}, section_id={self.section_id})"
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
+    __table_args__ = {'mysql_auto_increment': 100000}
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(50), unique=True, nullable=False)

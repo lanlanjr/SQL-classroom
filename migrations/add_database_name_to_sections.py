@@ -20,7 +20,7 @@ def run_migration():
         columns = [column['name'] for column in inspector.get_columns('sections')]
         
         if 'database_name' not in columns:
-            print("Adding database_name column to sections table...")
+
             
             # Use direct SQL to add the column since we can't use Alembic migrations easily
             db.engine.execute("""
@@ -28,9 +28,9 @@ def run_migration():
                 ADD COLUMN database_name VARCHAR(100) NULL
             """)
             
-            print("Successfully added database_name column to sections table")
+
         else:
-            print("database_name column already exists in sections table")
+
 
 if __name__ == '__main__':
     run_migration()

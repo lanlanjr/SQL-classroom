@@ -16,6 +16,15 @@ login_manager = LoginManager()
 migrate = Migrate()
 csrf = CSRFProtect()
 
+# Configure logging
+import logging
+
+# Check if DEBUG is False and disable logging if so
+debug_setting = os.environ.get('DEBUG', 'True').lower()
+if debug_setting == 'false':
+    logging.disable(logging.CRITICAL)
+
+
 def create_app(*args, **kwargs):
     """
     Application factory function that accepts optional arguments.

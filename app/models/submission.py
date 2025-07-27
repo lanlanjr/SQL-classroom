@@ -3,6 +3,7 @@ from datetime import datetime
 
 class Submission(db.Model):
     __tablename__ = 'submissions'
+    __table_args__ = {'mysql_auto_increment': 100000}
     
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
