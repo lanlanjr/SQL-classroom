@@ -38,5 +38,8 @@ class Question(db.Model):
     def get_table_prefix(self):
         """Get the table prefix for imported schemas"""
         if self.db_type == 'imported_schema' and self.schema_import:
-            return self.schema_import.active_schema_name
+            prefix = self.schema_import.active_schema_name
+            print(f"[DEBUG] Question {self.id} - Schema Import ID: {self.schema_import_id}, Active Schema Name: {prefix}")
+            return prefix
+        print(f"[DEBUG] Question {self.id} - Not imported schema or no schema import (db_type: {self.db_type}, schema_import: {self.schema_import})")
         return '' 

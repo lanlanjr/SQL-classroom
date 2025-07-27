@@ -1,0 +1,167 @@
+{% extends "admin/base.html" %}
+
+{% block title %}User Details - {{ user.username }}{% endblock %}
+
+{% block admin_content %}
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2">User Details: {{ user.username }}</h1>
+                <div class="btn-toolbar mb-2 mb-md-0">
+                    <a href="{{ url_for('admin.manage_users') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Users
+                    </a>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- User Information -->
+                <div class="col-md-6">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">User Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <th>ID:</th>
+                                    <td>{{ user.id }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Username:</th>
+                                    <td>{{ user.username }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Email:</th>
+                                    <td>{{ user.email }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Full Name:</th>
+                                    <td>{{ user.full_name }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Role:</th>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if user.role == 'admin' else 'primary' if user.role == 'teacher' else 'secondary' }}">
+                                            {{ user.role.title() }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Created:</th>
+                                    <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else 'N/A' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Admin Actions -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Admin Actions</h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Change Role -->
+                            <form method="POST" action="{{ url_for('admin.update_user_role', user_id=user.id) }}" class="mb-3">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="form-group">
+                                    <label for="role">Change Role:</label>
+                                    <div class="input-group">
+                                        <select class="form-control" id="role" name="role">
+                                            <option value="student" {{ 'selected' if user.role == 'student' }}>Student</option>
+                                            <option value="teacher" {{ 'selected' if user.role == 'teacher' }}>Teacher</option>
+                                            <option value="admin" {{ 'selected' if user.role == 'admin' }}>Admin</option>
+                                        </select>
+                                        <div class="input-group-append">
+                                            <button type="submit" class="btn btn-warning">Update Role</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <!-- Toggle Status (if implemented) -->
+                            <form method="POST" action="{{ url_for('admin.toggle_user_status', user_id=user.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-secondary" onclick="return confirm('Are you sure you want to toggle this user\'s status?')">
+                                    <i class="fas fa-toggle-on"></i> Toggle Status
+                                </button>
+                                {% if user.is_active %}
+                                <span class="badge bg-success ml-2">Active</span>
+                                {% else %}
+                                <span class="badge bg-danger ml-2">Inactive</span>
+                                {% endif %} 
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Activity -->
+                <div class="col-md-6">
+                    {% if user.is_student() %}
+                    <!-- Student Sections -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Enrolled Sections</h5>
+                        </div>
+                        <div class="card-body">
+                            {% if sections %}
+                            <div class="list-group">
+                                {% for section in sections %}
+                                <div class="list-group-item">
+                                    <h6 class="mb-1">{{ section.name }}</h6>
+                                    <p class="mb-1">{{ section.description }}</p>
+                                    <small>Teacher: {{ section.creator.full_name }}</small>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <p class="text-muted">Not enrolled in any sections.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% elif user.is_teacher() %}
+                    <!-- Teacher Sections -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Created Sections</h5>
+                        </div>
+                        <div class="card-body">
+                            {% if sections %}
+                            <div class="list-group">
+                                {% for section in sections %}
+                                <div class="list-group-item">
+                                    <h6 class="mb-1">{{ section.name }}</h6>
+                                    <p class="mb-1">{{ section.description }}</p>
+                                    <small>{{ section.enrollments.filter_by(is_active=True).count() if section.enrollments else 0 }} students enrolled</small>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <p class="text-muted">No sections created yet.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Recent Submissions -->
+                    {% if user.is_student() and submissions %}
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Recent Submissions</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="list-group">
+                                {% for submission in submissions %}
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">Assignment {{ submission.assignment_id }}</h6>
+                                        <small>{{ submission.submitted_at.strftime('%Y-%m-%d %H:%M') if submission.submitted_at else 'N/A' }}</small>
+                                    </div>
+                                    <p class="mb-1">Status: {{ 'Correct' if submission.is_correct else 'Incorrect' if submission.is_correct is not none else 'Ungraded' }}</p>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+{% endblock %}

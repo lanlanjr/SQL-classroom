@@ -1,0 +1,169 @@
+{% extends "layout.html" %}
+
+{% block title %}Schema Monitor - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Schema Monitor <small class="text-muted">(Admin View)</small></h2>
+    
+    <div class="alert alert-info">
+        <h5><i class="fas fa-database"></i> Database Overview</h5>
+        <p>All imported schemas are stored in the <code>sql_classroom</code> database using table prefixes for isolation.</p>
+    </div>
+    
+    {% if schema_stats %}
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">{{ schema_stats|length }}</h5>
+                    <p class="card-text">Active Schemas</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">{{ schema_stats|sum(attribute='table_count') }}</h5>
+                    <p class="card-text">Total Tables</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">{{ "%.2f"|format(schema_stats|sum(attribute='size_mb')) }} MB</h5>
+                    <p class="card-text">Total Size</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">{{ "%.2f"|format((schema_stats|sum(attribute='size_mb')) / (schema_stats|length) if schema_stats|length > 0 else 0) }} MB</h5>
+                    <p class="card-text">Avg Size</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Schema Name</th>
+                    <th>Owner</th>
+                    <th>Table Prefix</th>
+                    <th>Tables</th>
+                    <th>Size (MB)</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in schema_stats %}
+                <tr>
+                    <td>
+                        <strong>{{ stat.schema.name }}</strong>
+                        {% if stat.schema.description %}
+                        <br><small class="text-muted">{{ stat.schema.description }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ stat.schema.created_by }}
+                        <br><small class="text-muted">{{ 'Template' if stat.schema.is_template else 'Regular' }}</small>
+                    </td>
+                    <td><code>{{ stat.schema.active_schema_name }}</code></td>
+                    <td>
+                        <span class="badge bg-primary">{{ stat.table_count }}</span>
+                        {% if stat.table_count > 0 %}
+                        <button class="btn btn-sm btn-outline-secondary ms-2" type="button" data-bs-toggle="collapse" data-bs-target="#tables-{{ stat.schema.id }}">
+                            View Tables
+                        </button>
+                        {% endif %}
+                    </td>
+                    <td>{{ stat.size_mb }}</td>
+                    <td>{{ stat.schema.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info view-schema" data-schema-id="{{ stat.schema.id }}">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% if stat.table_count > 0 %}
+                <tr class="collapse" id="tables-{{ stat.schema.id }}">
+                    <td colspan="7">
+                        <div class="p-3 bg-light">
+                            <h6>Tables in this schema:</h6>
+                            <div class="row">
+                                {% for table in stat.tables %}
+                                <div class="col-md-4">
+                                    <code>{{ table }}</code>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center">No active schemas found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="mt-4">
+        <h4>Database Cleanup</h4>
+        <div class="alert alert-warning">
+            <strong>⚠️ Administrative Actions:</strong>
+            <ul class="mb-0">
+                <li>Tables are automatically cleaned up when schemas are deleted</li>
+                <li>Orphaned tables (without corresponding schema records) should be investigated</li>
+                <li>Regular backups of the sql_classroom database are recommended</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Schema View Modal -->
+<div class="modal fade" id="schemaModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Schema Content</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre><code id="schemaContent"></code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // View schema button handlers
+    document.querySelectorAll('.view-schema').forEach(button => {
+        button.addEventListener('click', async function() {
+            const schemaId = this.dataset.schemaId;
+            try {
+                const response = await fetch(`/teacher/schema/${schemaId}`);
+                const data = await response.json();
+                document.getElementById('schemaContent').textContent = data.content;
+                new bootstrap.Modal(document.getElementById('schemaModal')).show();
+            } catch (error) {
+                console.error('Error fetching schema:', error);
+                alert('Error loading schema content');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

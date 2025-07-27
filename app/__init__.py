@@ -55,10 +55,12 @@ def create_app(*args, **kwargs):
     from app.routes.main import main
     from app.routes.teacher import teacher
     from app.routes.student import student
+    from app.routes.admin import admin
     app.register_blueprint(auth)
     app.register_blueprint(main)
     app.register_blueprint(teacher)
     app.register_blueprint(student)
+    app.register_blueprint(admin)
     
     # Add context processor for section teachers
     @app.context_processor

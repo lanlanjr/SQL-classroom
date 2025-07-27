@@ -94,8 +94,15 @@
             
             <div id="mysql-section" class="mb-3" style="display: none;">
                 <label for="mysql_db_name" class="form-label">MySQL Database Name</label>
-                <input type="text" class="form-control" id="mysql_db_name" name="mysql_db_name">
-                <div class="form-text">Enter the name of an existing MySQL database on localhost (user: root).</div>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="mysql_db_name" name="mysql_db_name" 
+                           placeholder="Select or enter database name" list="mysql-database-list">
+                    <datalist id="mysql-database-list"></datalist>
+                    <button type="button" class="btn btn-outline-secondary" id="refresh-mysql-databases">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="form-text">Select an allowed database or use your imported schema names.</div>
                 <div class="alert alert-info mt-2">
                     <i class="fas fa-info-circle me-2"></i> Using MySQL connection: localhost:3306 (user: root)
                 </div>
@@ -107,11 +114,21 @@
                     <option value="">-- Select a Schema --</option>
                     {% if schemas %}
                         {% for schema in schemas %}
-                        <option value="{{ schema.id }}">{{ schema.name }} {% if schema.description %}({{ schema.description }}){% endif %}</option>
+                        <option value="{{ schema.id }}" data-schema-name="{{ schema.name }}" data-active-schema="{{ schema.active_schema_name or 'Not deployed' }}">
+                            {{ schema.name }} {% if schema.description %}({{ schema.description }}){% endif %}
+                            {% if not schema.active_schema_name %} - ⚠️ Not Deployed{% endif %}
+                        </option>
                         {% endfor %}
                     {% endif %}
                 </select>
-                <div class="form-text">Select a previously imported schema to use for this question.</div>
+                <div class="form-text">
+                    Select a previously imported schema to use for this question.
+                    <br><strong>Note:</strong> The schema must be deployed (use the "Use" button in import schema page) before it can be used in questions.
+                </div>
+                <button type="button" class="btn btn-outline-info mt-2" id="test-schema-btn" style="display: none;">
+                    <i class="fas fa-flask me-2"></i> Test Schema Connection
+                </button>
+                <div id="schema-test-results" class="mt-2" style="display: none;"></div>
                 {% if not schemas %}
                 <div class="alert alert-warning mt-2">
                     <i class="fas fa-exclamation-triangle me-2"></i> No schemas imported yet. 
@@ -458,5 +475,142 @@ INSERT INTO enrollments (student_id, course_id, semester, grade) VALUES
             console.log("Showing imported schema section");
         }
     }
+    
+    // Add validation for schema selection
+    document.addEventListener('DOMContentLoaded', function() {
+        const schemaSelect = document.getElementById('schema_import_id');
+        const testSchemaBtn = document.getElementById('test-schema-btn');
+        
+        if (schemaSelect) {
+            schemaSelect.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                
+                if (this.value) {
+                    // Show test button when schema is selected
+                    testSchemaBtn.style.display = 'block';
+                } else {
+                    // Hide test button when no schema selected
+                    testSchemaBtn.style.display = 'none';
+                    document.getElementById('schema-test-results').style.display = 'none';
+                }
+                
+                if (selectedOption && selectedOption.dataset.activeSchema === 'Not deployed') {
+                    alert('⚠️ Warning: This schema has not been deployed yet. Please go to the Import Schema page and click "Use" to deploy it before using it in questions.');
+                }
+            });
+        }
+        
+        // Test schema button handler
+        if (testSchemaBtn) {
+            testSchemaBtn.addEventListener('click', async function() {
+                const schemaId = document.getElementById('schema_import_id').value;
+                if (!schemaId) {
+                    alert('Please select a schema first');
+                    return;
+                }
+                
+                // Show loading
+                this.disabled = true;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Testing...';
+                
+                try {
+                    // Create a temporary question to test with
+                    const testData = {
+                        title: 'Test Question',
+                        description: 'Test',
+                        db_type: 'imported_schema',
+                        schema_import_id: schemaId,
+                        query: 'SHOW TABLES'  // Simple test query
+                    };
+                    
+                    const response = await fetch('/teacher/api/preview-question', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify(testData)
+                    });
+                    
+                    const result = await response.json();
+                    const resultsDiv = document.getElementById('schema-test-results');
+                    
+                    if (result.error) {
+                        resultsDiv.innerHTML = `
+                            <div class="alert alert-danger">
+                                <strong>❌ Schema Test Failed:</strong><br>
+                                ${result.error}
+                            </div>
+                        `;
+                    } else if (result.query_result) {
+                        const tableCount = result.query_result.data ? result.query_result.data.length : 0;
+                        resultsDiv.innerHTML = `
+                            <div class="alert alert-success">
+                                <strong>✅ Schema Test Successful!</strong><br>
+                                Connected to sql_classroom database.<br>
+                                Found ${tableCount} prefixed tables for this schema.
+                            </div>
+                        `;
+                    }
+                    
+                    resultsDiv.style.display = 'block';
+                    
+                } catch (error) {
+                    console.error('Test error:', error);
+                    document.getElementById('schema-test-results').innerHTML = `
+                        <div class="alert alert-danger">
+                            <strong>❌ Test Failed:</strong><br>
+                            ${error.message}
+                        </div>
+                    `;
+                    document.getElementById('schema-test-results').style.display = 'block';
+                } finally {
+                    // Reset button
+                    this.disabled = false;
+                    this.innerHTML = '<i class="fas fa-flask me-2"></i> Test Schema Connection';
+                }
+            });
+        }
+    });
+
+    // Database loading functionality for MySQL section
+    const mysqlDatabaseList = document.getElementById('mysql-database-list');
+    const refreshMysqlDatabasesBtn = document.getElementById('refresh-mysql-databases');
+    
+    // Load available databases
+    function loadMysqlDatabases() {
+        fetch('{{ url_for("teacher.get_available_databases") }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                // Clear existing options
+                mysqlDatabaseList.innerHTML = '';
+                
+                // Add options for each database
+                data.databases.forEach(db => {
+                    const option = document.createElement('option');
+                    option.value = db;
+                    mysqlDatabaseList.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading databases:', error);
+            });
+    }
+    
+    // Load databases when MySQL is selected
+    const dbTypeSelect = document.getElementById('db_type');
+    dbTypeSelect.addEventListener('change', function() {
+        if (this.value === 'mysql') {
+            loadMysqlDatabases();
+        }
+    });
+    
+    // Refresh databases button handler
+    refreshMysqlDatabasesBtn.addEventListener('click', loadMysqlDatabases);
 </script>
 {% endblock %} 

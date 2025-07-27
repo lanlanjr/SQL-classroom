@@ -19,7 +19,15 @@ student_sessions = {}
 
 @student.before_request
 def check_student():
-    if not current_user.is_authenticated or not current_user.is_student():
+    if not current_user.is_authenticated:
+        flash('Access denied. You must be a student to view this page.', 'danger')
+        return redirect(url_for('main.index'))
+    
+    if not current_user.is_active:
+        flash('Access denied. Your account has been deactivated. Please contact an administrator.', 'danger')
+        return redirect(url_for('main.index'))
+    
+    if not current_user.is_student():
         flash('Access denied. You must be a student to view this page.', 'danger')
         return redirect(url_for('main.index'))
 
@@ -483,21 +491,43 @@ def execute_query():
     # For imported schemas, modify the query to use prefixed table names
     if question.db_type == 'imported_schema':
         table_prefix = question.get_table_prefix()
+        print(f"[DEBUG] Schema Import - Table prefix: {table_prefix}")
+        
         if table_prefix:
             # Get all table names from the schema content
             schema_content = question.schema_import.schema_content
+            print(f"[DEBUG] Schema content length: {len(schema_content)}")
+            print(f"[DEBUG] Schema content preview: {schema_content[:200]}...")
+            
             table_names = []
-            for line in schema_content.split('\n'):
-                if 'CREATE TABLE' in line.upper():
-                    # Extract table name
-                    table_name = line[line.find('TABLE') + 5:].strip().split()[0].strip('`')
+            
+            # Parse CREATE TABLE statements to extract table names using utility function
+            from app.utils import parse_schema_statements
+            statements = parse_schema_statements(schema_content)
+            print(f"[DEBUG] Parsed {len(statements)} statements")
+            
+            for i, stmt in enumerate(statements):
+                print(f"[DEBUG] Statement {i}: {stmt[:100]}...")
+                if stmt.upper().strip().startswith('CREATE TABLE'):
+                    print(f"[DEBUG] Found CREATE TABLE statement")
+                    # Extract table name using the same logic as import
+                    table_start = stmt.upper().find('TABLE') + 5
+                    table_part = stmt[table_start:].strip()
+                    print(f"[DEBUG] Table part after 'TABLE': '{table_part[:50]}...'")
+                    table_name = table_part.split()[0].strip('`').rstrip('(').strip('`')
+                    print(f"[DEBUG] Extracted table name: '{table_name}'")
                     table_names.append(table_name)
             
-            # Replace table names with prefixed versions in the query
-            modified_query = query
-            for table_name in table_names:
-                modified_query = modified_query.replace(table_name, f"{table_prefix}{table_name}")
-            query = modified_query
+            print(f"[DEBUG] Found table names: {table_names}")
+            print(f"[DEBUG] Original query: {query}")
+            
+            # Replace table names with prefixed versions in the query using word boundaries
+            from app.utils import rewrite_query_for_schema
+            query = rewrite_query_for_schema(query, schema_content, table_prefix)
+        else:
+            print("[DEBUG] No table prefix found - schema may not be deployed")
+    else:
+        print(f"[DEBUG] Not an imported schema - db_type: {question.db_type}")
     
     try:
         # Handle different database types
@@ -538,6 +568,45 @@ def execute_query():
                             # Ensure values are in the same order as columns
                             row_values = [serializable_row.get(col) for col in columns]
                             rows.append(row_values)
+                        
+                        # Check if this is a SHOW TABLES query on an imported schema
+                        from app.utils import is_show_tables_query, is_show_databases_query
+                        if is_show_tables_query(query) and question.db_type == 'imported_schema':
+                            # For imported schema questions, filter the SHOW TABLES results
+                            # to only show the relevant tables without prefixes
+                            if question.schema_import and question.schema_import.active_schema_name:
+                                prefix = question.schema_import.active_schema_name
+                                
+                                # Filter tables that match this schema's prefix
+                                schema_tables = []
+                                for row in rows:
+                                    table_name = row[0]  # First column is table name
+                                    if table_name.startswith(prefix):
+                                        # Remove prefix to get clean table name
+                                        clean_name = table_name[len(prefix):]
+                                        schema_tables.append([clean_name])
+                                
+                                # Update the results to show only the clean table names
+                                if schema_tables:
+                                    rows = schema_tables
+                                    # Update column header to be cleaner
+                                    columns = ["Tables"]
+                        elif is_show_databases_query(query):
+                            # For SHOW DATABASES in question context, only show the database for this specific question
+                            question_database = None
+                            
+                            if question.db_type == 'imported_schema':
+                                # For imported schemas, show the schema name
+                                if question.schema_import:
+                                    question_database = question.schema_import.name
+                            elif question.db_type == 'mysql':
+                                # For MySQL questions, show the configured database name
+                                question_database = question.mysql_db_name
+                            
+                            # Filter to only show the relevant database
+                            if question_database:
+                                rows = [[question_database]]
+                                columns = ["Database"]
                         
                         result = {
                             'columns': columns,
@@ -680,25 +749,53 @@ def submit_answer():
     now = datetime.now()
     if assignment.due_date and assignment.due_date < now:
         return jsonify({'error': 'This assignment has passed its due date. You can no longer submit solutions.'}), 403
+
+    # For imported schemas, modify both queries to use prefixed table names
+    student_query = query
+    teacher_query = question.correct_answer
     
+    if question.db_type == 'imported_schema':
+        table_prefix = question.get_table_prefix()
+        print(f"[DEBUG] Submit Answer - Schema Import - Table prefix: {table_prefix}")
+        
+        if table_prefix:
+            # Get all table names from the schema content
+            schema_content = question.schema_import.schema_content
+            print(f"[DEBUG] Submit Answer - Schema content length: {len(schema_content)}")
+            
+            # Replace table names with prefixed versions in both queries
+            from app.utils import rewrite_query_for_schema
+            
+            print(f"[DEBUG] Submit Answer - Original student query: {student_query}")
+            student_query = rewrite_query_for_schema(student_query, schema_content, table_prefix)
+            print(f"[DEBUG] Submit Answer - Rewritten student query: {student_query}")
+            
+            print(f"[DEBUG] Submit Answer - Original teacher query: {teacher_query}")
+            teacher_query = rewrite_query_for_schema(teacher_query, schema_content, table_prefix)
+            print(f"[DEBUG] Submit Answer - Rewritten teacher query: {teacher_query}")
+        else:
+            print("[DEBUG] Submit Answer - No table prefix found - schema may not be deployed")
+    else:
+        print(f"[DEBUG] Submit Answer - Not an imported schema - db_type: {question.db_type}")
+
     try:
         # Different handling based on database type
         if question.uses_mysql():  # This covers both 'mysql' and 'imported_schema'
             try:
-                # Validate the query first
+                # Validate the query first (use original query for validation)
                 validate_student_query(query)
                 
                 # Get restricted connection
                 conn = get_student_db_connection(question)
                 
-                # Execute student query
+                # Execute student query (use rewritten query)
                 with conn.cursor() as cursor:
-                    cursor.execute(query)
+                    cursor.execute(student_query)
                     student_data = cursor.fetchall()
                 
-                # Execute teacher's correct query
+                # Execute teacher's correct query (use rewritten query)
                 with conn.cursor() as cursor:
-                    cursor.execute(question.correct_answer)
+                    cursor.execute(teacher_query)
                     teacher_data = cursor.fetchall()
                 
                 # Convert data to JSON-serializable format
@@ -1121,14 +1218,83 @@ def playground_execute():
         # Validate the query for security
         validate_student_query(query)
         
+        # Check if database access is allowed
+        from app.models import AllowedDatabase
+        from app.models.schema_import import SchemaImport
+        from app.models.section import Section
+        
+        # Check if database is in allowed list
+        is_allowed_database = AllowedDatabase.is_database_allowed(database_name)
+        
+        # Check if this is a teacher's imported schema name
+        is_teacher_schema_access = False
+        selected_schema = None
+        actual_database_name = database_name  # Will be the actual database to connect to
+        
+        current_section_id = session.get('current_section_id')
+        if current_section_id and not is_allowed_database:
+            try:
+                section = Section.query.get(current_section_id)
+                if section and section.creator_id:
+                    # Check if the database_name is actually a schema name
+                    teacher_schema = SchemaImport.query.filter_by(
+                        created_by=section.creator_id,
+                        name=database_name
+                    ).filter(SchemaImport.active_schema_name.isnot(None)).first()
+                    
+                    if teacher_schema:
+                        is_teacher_schema_access = True
+                        selected_schema = teacher_schema
+                        actual_database_name = 'sql_classroom'  # Connect to sql_classroom for schema access
+            except Exception as e:
+                print(f"Error checking teacher schema access: {e}")
+        
+        # Allow access if it's an allowed database OR teacher schema access
+        if not (is_allowed_database or is_teacher_schema_access):
+            # Get list of allowed databases for error message
+            allowed_databases = AllowedDatabase.get_active_database_names()
+            error_msg = f'Access to database "{database_name}" is not allowed.'
+            
+            if allowed_databases:
+                db_list = ', '.join(allowed_databases)
+                # Also mention schema names if teacher has schemas
+                if current_section_id:
+                    try:
+                        section = Section.query.get(current_section_id)
+                        if section and section.creator_id:
+                            teacher_schemas = SchemaImport.query.filter_by(created_by=section.creator_id).filter(
+                                SchemaImport.active_schema_name.isnot(None)
+                            ).all()
+                            if teacher_schemas:
+                                schema_names = [schema.name for schema in teacher_schemas]
+                                db_list += ', ' + ', '.join(schema_names) + ' (teacher schemas)'
+                    except:
+                        pass
+                
+                error_msg += f' Available options: {db_list}'
+                
+            return jsonify({'error': error_msg}), 403
+        
+        # For imported schema access, check if we need to rewrite table names
+        if selected_schema:
+            # Use the selected schema for query rewriting
+            table_prefix = selected_schema.active_schema_name
+            schema_content = selected_schema.schema_content
+            
+            print(f"[DEBUG] Playground - Using selected schema: {selected_schema.name}, prefix: {table_prefix}")
+            
+            # Apply query rewriting using utility function
+            from app.utils import rewrite_query_for_schema
+            query = rewrite_query_for_schema(query, schema_content, table_prefix)
+        
         try:
-            # Connect to MySQL using the provided database name
+            # Connect to MySQL using the provided database name (actual_database_name)
             conn = pymysql.connect(
                 host=os.environ.get('MYSQL_HOST', 'localhost'),
                 user=os.environ.get('MYSQL_USER', 'root'),
                 password=os.environ.get('MYSQL_PASSWORD', 'admin'),
                 port=int(os.environ.get('MYSQL_PORT', 3306)),
-                database=database_name,
+                database=actual_database_name,
                 cursorclass=pymysql.cursors.DictCursor
             )
             
@@ -1159,6 +1325,32 @@ def playground_execute():
                         # Ensure values are in the same order as columns
                         row_values = [serializable_row.get(col) for col in columns]
                         rows.append(row_values)
+                    
+                    # Check if this is a SHOW TABLES query on an imported schema
+                    from app.utils import is_show_tables_query, process_show_tables_result_for_schema, is_show_databases_query, filter_show_databases_result, filter_show_databases_result_for_user
+                    if is_show_tables_query(query):
+                        if selected_schema:
+                            # Filter tables for the specific selected schema
+                            prefix = selected_schema.active_schema_name
+                            # Filter tables to only show those belonging to this schema
+                            filtered_rows = []
+                            for row in rows:
+                                table_name = row[0]
+                                if table_name.startswith(prefix):
+                                    # Remove the prefix to show the original table name
+                                    original_name = table_name[len(prefix):]
+                                    filtered_rows.append([original_name])
+                            rows = filtered_rows
+                        else:
+                            # Get current section context for the student
+                            current_section_id = session.get('current_section_id')
+                            columns, rows = process_show_tables_result_for_schema(
+                                columns, rows, actual_database_name, current_user.id, section_id=current_section_id
+                            )
+                    elif is_show_databases_query(query):
+                        # Filter SHOW DATABASES result to include allowed databases and accessible schemas
+                        from app.utils import filter_show_databases_result_for_user
+                        columns, rows = filter_show_databases_result_for_user(columns, rows, current_user)
                     
                     result = {
                         'columns': columns,
@@ -1198,7 +1390,44 @@ def playground_execute():
 def get_available_databases():
     """API endpoint to get a list of available MySQL databases."""
     try:
-        # Connect to MySQL using root credentials
+        from app.models import AllowedDatabase
+        from app.models.schema_import import SchemaImport
+        from app.models.section import Section
+        
+        # Get current section to find the teacher
+        current_section_id = session.get('current_section_id')
+        available_databases = []
+        
+        # First check if there are any allowed databases configured by admin
+        allowed_databases = AllowedDatabase.get_active_database_names()
+        if allowed_databases:
+            available_databases.extend(allowed_databases)
+        
+        # Check if teacher has imported schemas that students can access
+        if current_section_id:
+            try:
+                section = Section.query.get(current_section_id)
+                if section and section.creator_id:
+                    # Find active schemas created by the section's teacher
+                    teacher_schemas = SchemaImport.query.filter_by(created_by=section.creator_id).filter(
+                        SchemaImport.active_schema_name.isnot(None)
+                    ).all()
+                    
+                    # Add each schema's name as an available database option
+                    for schema in teacher_schemas:
+                        schema_name = schema.name
+                        if schema_name not in available_databases:
+                            available_databases.append(schema_name)
+            except Exception as e:
+                print(f"Error checking teacher schemas: {e}")
+        
+        # If we have databases to show (either allowed or teacher schemas), return them
+        if available_databases:
+            available_databases.sort()
+            return jsonify({'databases': available_databases})
+        
+        # Fallback: if no allowed databases configured and no teacher schemas, 
+        # return all databases except system ones (backward compatibility)
         conn = pymysql.connect(
             host=os.environ.get('MYSQL_HOST', 'localhost'),
             user=os.environ.get('MYSQL_USER', 'root'),

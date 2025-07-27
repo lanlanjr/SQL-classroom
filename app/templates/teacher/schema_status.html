@@ -1,0 +1,258 @@
+{% extends "layout.html" %}
+
+{% block title %}Schema Status - SQL Classroom{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Your Schema Status</h2>
+        <div>
+            <a href="{{ url_for('teacher.import_schema') }}" class="btn btn-primary me-2">
+                <i class="fas fa-upload me-2"></i> Import Schema
+            </a>
+            <a href="{{ url_for('teacher.new_question') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-plus me-2"></i> New Question
+            </a>
+        </div>
+    </div>
+    
+    <div class="alert alert-info">
+        <h5><i class="fas fa-info-circle"></i> How Schemas Work</h5>
+        <p>Imported schemas are deployed to the <code>sql_classroom</code> database with unique table prefixes. This diagnostic page shows the deployment status of your schemas.</p>
+    </div>
+    
+    {% if schemas %}
+    <div class="row">
+        {% for schema in schemas %}
+        <div class="col-md-6 mb-4">
+            <div class="card {% if schema.is_deployed %}border-success{% else %}border-warning{% endif %}">
+                <div class="card-header {% if schema.is_deployed %}bg-success text-white{% else %}bg-warning text-dark{% endif %}">
+                    <h5 class="card-title mb-0">
+                        {{ schema.name }}
+                        {% if schema.is_deployed %}
+                        <span class="badge bg-light text-success ms-2">✅ Deployed</span>
+                        {% else %}
+                        <span class="badge bg-light text-warning ms-2">⚠️ Not Deployed</span>
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if schema.description %}
+                    <p class="card-text"><strong>Description:</strong> {{ schema.description }}</p>
+                    {% endif %}
+                    
+                    <p class="card-text">
+                        <strong>Created:</strong> {{ schema.created_at }}<br>
+                        <strong>Schema ID:</strong> {{ schema.id }}
+                    </p>
+                    
+                    {% if schema.is_deployed %}
+                    <div class="mb-3">
+                        <strong>Database Details:</strong><br>
+                        <code>Database: sql_classroom</code><br>
+                        <code>Table Prefix: {{ schema.active_schema_name }}</code><br>
+                        <strong>Tables Created:</strong> {{ schema.table_count }}
+                    </div>
+                    
+                    {% if schema.tables %}
+                    <div class="mb-3">
+                        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#tables-{{ schema.id }}">
+                            <i class="fas fa-table me-1"></i> View Tables ({{ schema.table_count }})
+                        </button>
+                        <div class="collapse mt-2" id="tables-{{ schema.id }}">
+                            <div class="bg-light p-2 rounded">
+                                {% for table in schema.tables %}
+                                <code class="d-block">{{ table }}</code>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary btn-sm test-query-btn" data-schema-id="{{ schema.id }}">
+                            <i class="fas fa-flask me-1"></i> Test Query
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm view-content-btn" data-schema-id="{{ schema.id }}">
+                            <i class="fas fa-code me-1"></i> View Schema Content
+                        </button>
+                    </div>
+                    
+                    {% elif schema.database_error %}
+                    <div class="alert alert-danger">
+                        <strong>Database Error:</strong> {{ schema.database_error }}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <strong>Not Deployed:</strong> This schema needs to be deployed before it can be used.
+                        <a href="{{ url_for('teacher.import_schema') }}" class="alert-link">Go to Import Schema page</a> and click "Use" button.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+        <i class="fas fa-database fa-4x text-muted mb-3"></i>
+        <h4>No Schemas Imported Yet</h4>
+        <p class="text-muted">Start by importing your first database schema.</p>
+        <a href="{{ url_for('teacher.import_schema') }}" class="btn btn-primary">
+            <i class="fas fa-upload me-2"></i> Import Your First Schema
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Test Results Modal -->
+<div class="modal fade" id="testResultsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Schema Test Results</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="testResultsContent">
+                <!-- Test results will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle test query buttons
+    document.querySelectorAll('.test-query-btn').forEach(button => {
+        button.addEventListener('click', async function() {
+            const schemaId = this.dataset.schemaId;
+            
+            // Show loading
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Testing...';
+            
+            try {
+                // Test with a simple SHOW TABLES query
+                const testData = {
+                    title: 'Test Question',
+                    description: 'Test',
+                    db_type: 'imported_schema',
+                    schema_import_id: schemaId,
+                    query: 'SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = "sql_classroom"',
+                    check_answer: false
+                };
+                
+                const response = await fetch('/teacher/api/preview-question', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                const result = await response.json();
+                
+                // Show results in modal
+                let content = '<div class="mb-3"><h6>Test Query: List Tables</h6>';
+                
+                if (result.error) {
+                    content += `
+                        <div class="alert alert-danger">
+                            <strong>❌ Test Failed:</strong><br>
+                            ${result.error}
+                        </div>
+                    `;
+                } else if (result.query_result) {
+                    content += `
+                        <div class="alert alert-success">
+                            <strong>✅ Test Successful!</strong><br>
+                            Connected to sql_classroom database successfully.
+                        </div>
+                    `;
+                }
+                
+                content += '</div>';
+                
+                document.getElementById('testResultsContent').innerHTML = content;
+                new bootstrap.Modal(document.getElementById('testResultsModal')).show();
+                
+            } catch (error) {
+                console.error('Test error:', error);
+                document.getElementById('testResultsContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>❌ Test Failed:</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+                new bootstrap.Modal(document.getElementById('testResultsModal')).show();
+            } finally {
+                // Reset button
+                this.disabled = false;
+                this.innerHTML = '<i class="fas fa-flask me-1"></i> Test Query';
+            }
+        });
+    });
+    
+    // Handle view content buttons
+    document.querySelectorAll('.view-content-btn').forEach(button => {
+        button.addEventListener('click', async function() {
+            const schemaId = this.dataset.schemaId;
+            
+            try {
+                const response = await fetch(`/teacher/schema/${schemaId}/content`);
+                const result = await response.json();
+                
+                let content = `
+                    <div class="mb-3">
+                        <h6>Schema: ${result.schema.name}</h6>
+                        <p><strong>Content Length:</strong> ${result.schema.content_length} characters</p>
+                        <p><strong>Active Schema Name:</strong> ${result.schema.active_schema_name || 'Not deployed'}</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Parsed Structure:</h6>
+                        <p><strong>Total Statements:</strong> ${result.parsed.total_statements}</p>
+                        <p><strong>CREATE TABLE Statements:</strong> ${result.parsed.create_tables.length}</p>
+                `;
+                
+                if (result.parsed.create_tables.length > 0) {
+                    content += '<h6>Tables Found:</h6><ul>';
+                    result.parsed.create_tables.forEach(table => {
+                        content += `<li><strong>${table.name}</strong></li>`;
+                    });
+                    content += '</ul>';
+                } else {
+                    content += '<div class="alert alert-warning">❌ No CREATE TABLE statements found!</div>';
+                }
+                
+                content += `
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Raw Content:</h6>
+                        <pre style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px;"><code>${result.content}</code></pre>
+                    </div>
+                `;
+                
+                document.getElementById('testResultsContent').innerHTML = content;
+                new bootstrap.Modal(document.getElementById('testResultsModal')).show();
+                
+            } catch (error) {
+                console.error('Error loading schema content:', error);
+                document.getElementById('testResultsContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>❌ Error loading schema content:</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+                new bootstrap.Modal(document.getElementById('testResultsModal')).show();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

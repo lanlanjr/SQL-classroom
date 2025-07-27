@@ -1,0 +1,134 @@
+{% extends "admin/base.html" %}
+
+{% block title %}System Logs{% endblock %}
+
+{% block admin_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">System Logs</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <a href="{{ url_for('admin.system_info') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to System Info
+            </a>
+            <button type="button" class="btn btn-outline-primary" onclick="refreshLogs()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-list-alt"></i> Recent System Activity
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Level</th>
+                                <th>Source</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in log_entries %}
+                            <tr>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}
+                                    </small>
+                                </td>
+                                <td>
+                                    {% if log.level == 'ERROR' %}
+                                        <span class="badge bg-danger">{{ log.level }}</span>
+                                    {% elif log.level == 'WARNING' %}
+                                        <span class="badge bg-warning">{{ log.level }}</span>
+                                    {% elif log.level == 'INFO' %}
+                                        <span class="badge bg-info">{{ log.level }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ log.level }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <code class="small">{{ log.source }}</code>
+                                </td>
+                                <td>
+                                    <span class="text-break">{{ log.message }}</span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">
+                                    <em>No log entries found</em>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Log Information
+                </h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li><strong>Total Entries:</strong> {{ log_entries|length }}</li>
+                    <li><strong>Time Range:</strong> Last 50 entries</li>
+                    <li><strong>Sources:</strong> AUTH, SUBMISSION, SYSTEM</li>
+                    <li><strong>Auto-Refresh:</strong> Manual</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-chart-bar"></i> Log Statistics
+                </h6>
+            </div>
+            <div class="card-body">
+                {% set log_stats = {} %}
+                {% for log in log_entries %}
+                    {% if log_stats.update({log.level: log_stats.get(log.level, 0) + 1}) %}{% endif %}
+                {% endfor %}
+                
+                <ul class="list-unstyled mb-0">
+                    {% for level, count in log_stats.items() %}
+                    <li>
+                        <strong>{{ level }}:</strong> 
+                        <span class="badge bg-secondary">{{ count }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshLogs() {
+    window.location.reload();
+}
+
+// Auto-scroll to top when page loads
+window.addEventListener('load', function() {
+    window.scrollTo(0, 0);
+});
+</script>
+{% endblock %}

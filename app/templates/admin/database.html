@@ -1,0 +1,374 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Database Management - Admin{% endblock %}
+
+{% block admin_content %}
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2">Database Management</h1>
+                <div class="btn-toolbar mb-2 mb-md-0">
+                    <a href="{{ url_for('admin.manage_allowed_databases') }}" class="btn btn-sm btn-outline-primary me-2">
+                        <i class="fas fa-cog"></i> Manage Allowed Databases
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshDatabaseStats()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- Database Overview -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card border-left-primary shadow h-100 py-2">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Size</div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                        {{ "%.2f"|format(db_stats.total_size_mb or 0) }} MB
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-database fa-2x text-gray-300"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card border-left-success shadow h-100 py-2">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total Tables</div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                        {{ db_stats.tables|length if db_stats.tables else 0 }}
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-table fa-2x text-gray-300"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card border-left-info shadow h-100 py-2">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Recent Submissions</div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                        {{ recent_submissions|length }}
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-paper-plane fa-2x text-gray-300"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Allowed Databases Overview -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Allowed Databases for SQL Playground</h5>
+                    <a href="{{ url_for('admin.manage_allowed_databases') }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-cog"></i> Manage
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if allowed_databases %}
+                    <div class="row">
+                        {% for allowed_db in allowed_databases[:6] %}
+                        <div class="col-md-4 mb-2">
+                            <div class="d-flex align-items-center">
+                                <span class="badge bg-{{ 'success' if allowed_db.is_active else 'secondary' }} me-2">
+                                    {{ 'Active' if allowed_db.is_active else 'Disabled' }}
+                                </span>
+                                <code>{{ allowed_db.database_name }}</code>
+                            </div>
+                            {% if allowed_db.description %}
+                            <small class="text-muted">{{ allowed_db.description }}</small>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if allowed_databases|length > 6 %}
+                    <div class="mt-2">
+                        <small class="text-muted">... and {{ allowed_databases|length - 6 }} more databases. <a href="{{ url_for('admin.manage_allowed_databases') }}">View all</a></small>
+                    </div>
+                    {% endif %}
+                    <div class="mt-3">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Total Allowed:</strong> {{ allowed_databases|length }}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Active:</strong> {{ allowed_databases|selectattr('is_active')|list|length }}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                        <h6 class="text-warning">No Allowed Databases Configured</h6>
+                        <p class="mb-2">No databases are currently allowed for SQL Playground and question creation.</p>
+                        <a href="{{ url_for('admin.manage_allowed_databases') }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i> Add Allowed Databases
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Database Tables -->
+            {% if db_stats.tables %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Database Tables</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Table Name</th>
+                                    <th>Rows</th>
+                                    <th>Size (MB)</th>
+                                    <th>Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for table in db_stats.tables %}
+                                <tr>
+                                    <td><code>{{ table.name }}</code></td>
+                                    <td>{{ "{:,}".format(table.rows) }}</td>
+                                    <td>{{ "%.2f"|format(table.size_mb) }}</td>
+                                    <td>
+                                        {% set percentage = (table.size_mb / db_stats.total_size_mb * 100) if db_stats.total_size_mb > 0 else 0 %}
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar" role="progressbar" 
+                                                 style="width: {{ percentage }}%" 
+                                                 aria-valuenow="{{ percentage }}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                                {{ "%.1f"|format(percentage) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Database Analysis Results -->
+            {% if session.get('db_analysis') %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-analytics"></i> Database Analysis Results
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Table Analysis -->
+                        <div class="col-md-8">
+                            <h6>Table Size Analysis</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Table</th>
+                                            <th>Rows</th>
+                                            <th>Data Size (MB)</th>
+                                            <th>Index Size (MB)</th>
+                                            <th>Total Size (MB)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for table in session.db_analysis.tables %}
+                                        <tr>
+                                            <td><code>{{ table.name }}</code></td>
+                                            <td>{{ "{:,}".format(table.rows|int) }}</td>
+                                            <td>{{ "%.2f"|format(table.data_size|float) }}</td>
+                                            <td>{{ "%.2f"|format(table.index_size|float) }}</td>
+                                            <td><strong>{{ "%.2f"|format(table.total_size|float) }}</strong></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-active">
+                                            <th colspan="4">Total Database Size</th>
+                                            <th>{{ "%.2f"|format(session.db_analysis.total_size|float) }} MB</th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Slow Queries -->
+                        <div class="col-md-4">
+                            <h6>Performance Issues</h6>
+                            {% if session.db_analysis.slow_queries %}
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Query</th>
+                                            <th>Avg Time (s)</th>
+                                            <th>Count</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for query in session.db_analysis.slow_queries %}
+                                        <tr>
+                                            <td><small><code>{{ query.query }}</code></small></td>
+                                            <td>{{ query.avg_time }}</td>
+                                            <td>{{ query.count }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle"></i> No slow queries detected
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recent Submissions -->
+            {% if recent_submissions %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Recent Database Activity (Last 20 Submissions)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Student</th>
+                                    <th>Assignment</th>
+                                    <th>Status</th>
+                                    <th>Submitted</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for submission in recent_submissions %}
+                                <tr>
+                                    <td>{{ submission.id }}</td>
+                                    <td>
+                                        <a href="{{ url_for('admin.user_detail', user_id=submission.student.id) }}">
+                                            {{ submission.student.full_name }}
+                                        </a>
+                                    </td>
+                                    <td>Assignment {{ submission.assignment_id }}</td>
+                                    <td>
+                                        {% if submission.is_correct is not none %}
+                                        <span class="badge bg-{{ 'success' if submission.is_correct else 'danger' }}">
+                                            {{ 'Correct' if submission.is_correct else 'Incorrect' }}
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Ungraded</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ submission.submitted_at.strftime('%Y-%m-%d %H:%M:%S') if submission.submitted_at else 'N/A' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Database Error Message -->
+            {% if db_stats.error %}
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle"></i> Database Error</h5>
+                <p>{{ db_stats.error }}</p>
+                <p class="mb-0">Please check the database connection and configuration.</p>
+            </div>
+            {% endif %}
+
+            <!-- Database Management Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Database Management Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card border-warning">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-broom fa-3x text-warning mb-3"></i>
+                                    <h6>Database Cleanup</h6>
+                                    <p class="small">Remove old submissions and temporary data</p>
+                                    <form method="POST" action="{{ url_for('admin.database_cleanup') }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-warning btn-sm" onclick="return confirm('Are you sure you want to perform database cleanup? This will remove old submissions and inactive enrollments.')">>
+                                            Start Cleanup
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card border-info">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-download fa-3x text-info mb-3"></i>
+                                    <h6>Database Backup</h6>
+                                    <p class="small">Create a backup of the entire database</p>
+                                    <form method="POST" action="{{ url_for('admin.database_backup') }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-info btn-sm" onclick="return confirm('Create a database backup? This may take several minutes for large databases.')">>
+                                            Create Backup
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card border-success">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-chart-line fa-3x text-success mb-3"></i>
+                                    <h6>Performance Analysis</h6>
+                                    <p class="small">Analyze database performance and optimization</p>
+                                    <form method="POST" action="{{ url_for('admin.database_analyze') }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Analyze database performance? This may take a few moments.')">>
+                                            Analyze
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+function refreshDatabaseStats() {
+    location.reload();
+}
+</script>
+{% endblock %}

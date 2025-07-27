@@ -1,0 +1,193 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Allowed Databases - Admin{% endblock %}
+
+{% block admin_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Manage Allowed Databases</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <form method="POST" action="{{ url_for('admin.scan_and_add_databases') }}" class="d-inline me-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm btn-outline-success" onclick="return confirm('Scan MySQL server and automatically add common databases to the allowed list?')">
+                <i class="fas fa-search"></i> Auto-Add Common DBs
+            </button>
+        </form>
+        <a href="{{ url_for('admin.manage_database') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Database
+        </a>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    <h5><i class="fas fa-info-circle"></i> About Allowed Databases</h5>
+    <p class="mb-0">Manage which MySQL databases are available for use in the SQL Playground and for question creation. Only databases in this list will be accessible to teachers and students. System databases (information_schema, mysql, performance_schema, sys) are automatically excluded.</p>
+</div>
+
+<!-- Add New Database Form -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">Add New Allowed Database</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('admin.manage_allowed_databases') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="add">
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <label for="database_name" class="form-label">Database Name</label>
+                    <input type="text" class="form-control" id="database_name" name="database_name" 
+                           list="available_databases" placeholder="Enter database name" required>
+                    <datalist id="available_databases">
+                        {% for db in available_databases %}
+                        <option value="{{ db }}">
+                        {% endfor %}
+                    </datalist>
+                    <div class="form-text">Select from existing databases or type a name</div>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="description" class="form-label">Description (Optional)</label>
+                    <input type="text" class="form-control" id="description" name="description" 
+                           placeholder="Brief description of this database">
+                </div>
+                
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Database
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Current Allowed Databases -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            Current Allowed Databases ({{ allowed_databases|length }})
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if allowed_databases %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Database Name</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                        <th>Added By</th>
+                        <th>Added On</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for allowed_db in allowed_databases %}
+                    <tr class="{{ 'table-light' if not allowed_db.is_active else '' }}">
+                        <td>
+                            <code>{{ allowed_db.database_name }}</code>
+                            {% if not allowed_db.is_active %}
+                                <span class="badge bg-secondary ms-2">Disabled</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ allowed_db.description or 'No description' }}</td>
+                        <td>
+                            {% if allowed_db.is_active %}
+                                <span class="badge bg-success">Active</span>
+                            {% else %}
+                                <span class="badge bg-danger">Disabled</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ allowed_db.creator.username if allowed_db.creator else 'Unknown' }}</td>
+                        <td>{{ allowed_db.created_at.strftime('%Y-%m-%d %H:%M') if allowed_db.created_at else 'N/A' }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <!-- Toggle Active/Inactive -->
+                                <form method="POST" action="{{ url_for('admin.manage_allowed_databases') }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="action" value="toggle">
+                                    <input type="hidden" name="db_id" value="{{ allowed_db.id }}">
+                                    <button type="submit" class="btn btn-outline-{{ 'warning' if allowed_db.is_active else 'success' }}" 
+                                            title="{{ 'Disable' if allowed_db.is_active else 'Enable' }} this database">
+                                        <i class="fas fa-{{ 'pause' if allowed_db.is_active else 'play' }}"></i>
+                                    </button>
+                                </form>
+                                
+                                <!-- Delete -->
+                                <form method="POST" action="{{ url_for('admin.manage_allowed_databases') }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="db_id" value="{{ allowed_db.id }}">
+                                    <button type="submit" class="btn btn-outline-danger" 
+                                            onclick="return confirm('Are you sure you want to remove &quot;{{ allowed_db.database_name }}&quot; from the allowed databases list? This action cannot be undone.')"
+                                            title="Remove from allowed list">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-database fa-3x text-muted mb-3"></i>
+            <h6 class="text-muted">No Allowed Databases Configured</h6>
+            <p class="text-muted">Add databases above to make them available for SQL Playground and question creation.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Statistics Card -->
+{% if allowed_databases %}
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card border-left-primary">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Active Databases</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            {{ allowed_databases|selectattr('is_active')|list|length }} / {{ allowed_databases|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-database fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card border-left-success">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Available to Users</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            {{ available_databases|length }} Total MySQL DBs
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-server fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Auto-refresh database list when needed
+function refreshDatabases() {
+    location.reload();
+}
+</script>
+{% endblock %}

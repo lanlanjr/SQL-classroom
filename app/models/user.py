@@ -25,9 +25,10 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(50), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # 'student' or 'teacher'
+    role = db.Column(db.String(20), nullable=False)  # 'student', 'teacher', or 'admin'
     first_name = db.Column(db.String(50), nullable=False, default='User')
     last_name = db.Column(db.String(50), nullable=False, default='Account')
+    is_active = db.Column(db.Boolean, default=True, nullable=False)  # User account status
     created_at = db.Column(db.TIMESTAMP, default=datetime.utcnow)
     
     # Relationships
@@ -57,6 +58,14 @@ class User(UserMixin, db.Model):
     
     def is_student(self):
         return self.role == 'student'
+    
+    def is_admin(self):
+        return self.role == 'admin'
+    
+    @property
+    def is_authenticated(self):
+        """Override Flask-Login's is_authenticated to check if user is active"""
+        return self.is_active
     
     def get_active_enrollments(self):
         """Get all active section enrollments for this student"""

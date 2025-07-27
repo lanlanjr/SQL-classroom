@@ -39,7 +39,11 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     {% if current_user.is_authenticated %}
-                        {% if current_user.is_teacher() %}
+                        {% if current_user.is_admin() %}
+                            <li class="nav-item">
+                                <a class="nav-link px-3 {% if request.endpoint.startswith('admin.') %}active{% endif %}" href="{{ url_for('admin.dashboard') }}">Admin Panel</a>
+                            </li>
+                        {% elif current_user.is_teacher() %}
                             <li class="nav-item">
                                 <a class="nav-link px-3 {% if request.endpoint == 'teacher.dashboard' %}active{% endif %}" href="{{ url_for('teacher.dashboard') }}">Dashboard</a>
                             </li>

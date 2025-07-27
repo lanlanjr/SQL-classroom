@@ -13,7 +13,7 @@ auth = Blueprint('auth', __name__)
 @auth.route('/debug/tokens')
 def debug_tokens():
     # Only allow in development mode
-    if os.environ.get('FLASK_ENV') != 'development' and not current_app.debug:
+    if os.environ.get('APP_ENV') != 'development' and not current_app.debug:
         return "Not available in production", 403
         
     # Get all tokens
@@ -76,10 +76,16 @@ def login():
         user = User.query.filter_by(username=username).first()
         
         if user and user.check_password(password):
+            if not user.is_active:
+                flash('Access denied. Your account has been deactivated. Please contact an administrator.', 'danger')
+                return render_template('auth/login.html')
+            
             login_user(user, remember=request.form.get('remember_me'))
             next_page = request.args.get('next')
             if not next_page or urlparse(next_page).netloc != '':
-                if user.is_teacher():
+                if user.is_admin():
+                    next_page = url_for('admin.dashboard')
+                elif user.is_teacher():
                     next_page = url_for('teacher.dashboard')
                 else:
                     next_page = url_for('student.dashboard')

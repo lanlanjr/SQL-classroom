@@ -1,0 +1,399 @@
+{% extends "admin/base.html" %}
+
+{% block title %}System Information - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Admin Sidebar -->
+        <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+            <div class="position-sticky pt-3">
+                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                    <span>Admin Panel</span>
+                </h6>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin.dashboard') }}">
+                            <i class="fas fa-tachometer-alt"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin.manage_users') }}">
+                            <i class="fas fa-users"></i> Users
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin.manage_sections') }}">
+                            <i class="fas fa-layer-group"></i> Sections
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin.manage_database') }}">
+                            <i class="fas fa-database"></i> Database
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('admin.system_info') }}">
+                            <i class="fas fa-server"></i> System Info
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2">System Information</h1>
+                <div class="btn-toolbar mb-2 mb-md-0">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="location.reload()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card border-left-success shadow h-100 py-2">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Database Status</div>
+                                    <div class="h6 mb-0 font-weight-bold">
+                                        <span class="badge bg-{{ 'success' if system_info.database_status == 'Connected' else 'danger' }}">
+                                            {{ system_info.database_status }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-database fa-2x text-gray-300"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="card border-left-info shadow h-100 py-2">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Environment</div>
+                                    <div class="h6 mb-0 font-weight-bold">
+                                        <span class="badge bg-{{ 'warning' if system_info.flask_env == 'development' else 'primary' }}">
+                                            {{ system_info.flask_env.title() }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-cog fa-2x text-gray-300"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="card border-left-warning shadow h-100 py-2">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Debug Mode</div>
+                                    <div class="h6 mb-0 font-weight-bold">
+                                        <span class="badge bg-{{ 'warning' if system_info.debug_mode else 'success' }}">
+                                            {{ 'ON' if system_info.debug_mode else 'OFF' }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-bug fa-2x text-gray-300"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="card border-left-primary shadow h-100 py-2">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Uptime</div>
+                                    <div class="h6 mb-0 font-weight-bold">
+                                        <span id="uptime">{{ system_info.uptime_display }}</span>
+                                        <br><small class="text-muted">Since {{ system_info.app_start_time.strftime('%Y-%m-%d %H:%M UTC') }}</small>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-clock fa-2x text-gray-300"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Details -->
+            <div class="row">
+                <div class="col-lg-6 mb-4">
+                    <div class="card shadow">
+                        <div class="card-header">
+                            <h6 class="m-0 font-weight-bold text-primary">Application Information</h6>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-borderless small">
+                                <tr>
+                                    <th style="width: 40%;">Flask Environment:</th>
+                                    <td>{{ system_info.flask_env }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Debug Mode:</th>
+                                    <td>
+                                        <span class="badge bg-{{ 'warning' if system_info.debug_mode else 'success' }}">
+                                            {{ 'Enabled' if system_info.debug_mode else 'Disabled' }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Application Started:</th>
+                                    <td>{{ system_info.app_start_time.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Current Uptime:</th>
+                                    <td><strong>{{ system_info.uptime_display }}</strong></td>
+                                </tr>
+                                <tr>
+                                    <th>Database Name:</th>
+                                    <td><code>{{ system_info.app_db_name }}</code></td>
+                                </tr>
+                                <tr>
+                                    <th>Current Time:</th>
+                                    <td>{{ system_info.current_time.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6 mb-4">
+                    <div class="card shadow">
+                        <div class="card-header">
+                            <h6 class="m-0 font-weight-bold text-primary">Database Information</h6>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-borderless small">
+                                <tr>
+                                    <th style="width: 40%;">Connection Status:</th>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if system_info.database_status == 'Connected' else 'danger' }}">
+                                            {{ system_info.database_status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Database URI:</th>
+                                    <td>
+                                        <small class="text-muted">
+                                            {% if 'password' in system_info.database_uri.lower() %}
+                                                {{ system_info.database_uri.split('@')[0].split('://')[0] }}://***:***@{{ system_info.database_uri.split('@')[1] if '@' in system_info.database_uri else 'localhost' }}
+                                            {% else %}
+                                                {{ system_info.database_uri[:50] }}{% if system_info.database_uri|length > 50 %}...{% endif %}
+                                            {% endif %}
+                                        </small>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Python Information -->
+            <div class="card shadow mb-4">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold text-primary">Python Environment</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h6>Python Version:</h6>
+                            <pre class="bg-light p-2 small">{{ system_info.python_version }}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Health Check -->
+            <div class="card shadow mb-4">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold text-primary">System Health Check</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-check-circle text-success mr-2"></i>
+                                <span>Database Connectivity</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-check-circle text-success mr-2"></i>
+                                <span>Flask Application</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-check-circle text-success mr-2"></i>
+                                <span>Template Rendering</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if system_info.debug_mode %}
+                    <div class="alert alert-warning mt-3">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        <strong>Warning:</strong> Debug mode is enabled. This should be disabled in production.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- System Actions -->
+            <div class="card shadow">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold text-primary">System Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <form method="POST" action="{{ url_for('admin.test_database_connection') }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-info btn-block">
+                                    <i class="fas fa-database mr-2"></i>Test Database Connection
+                                </button>
+                            </form>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <form method="POST" action="{{ url_for('admin.clear_application_cache') }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-outline-warning btn-block" onclick="return confirm('Clear application cache? This may temporarily slow down the application.')">
+                                    <i class="fas fa-broom mr-2"></i>Clear Application Cache
+                                </button>
+                            </form>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{{ url_for('admin.view_system_logs') }}" class="btn btn-outline-secondary btn-block">
+                                <i class="fas fa-file-alt mr-2"></i>View System Logs
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<style>
+/* Admin Panel Sidebar Styles */
+.sidebar {
+    background-color: #f8f9fa !important;
+    border-right: 1px solid #dee2e6;
+    min-height: calc(100vh - 56px);
+}
+
+.sidebar .nav-link {
+    font-weight: 500;
+    color: #333;
+    padding: 0.75rem 1rem;
+    border-radius: 0.25rem;
+    margin: 0.125rem 0.5rem;
+}
+
+.sidebar .nav-link:hover {
+    color: #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.sidebar .nav-link.active {
+    color: #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+    border-left: 3px solid #007bff;
+    margin-left: 0.5rem;
+    padding-left: calc(1rem - 3px);
+}
+
+.sidebar .nav-link i {
+    margin-right: 0.5rem;
+    width: 1rem;
+}
+
+.sidebar-heading {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Statistics Cards */
+.border-left-primary {
+    border-left: 0.25rem solid #4e73df !important;
+}
+
+.border-left-success {
+    border-left: 0.25rem solid #1cc88a !important;
+}
+
+.border-left-info {
+    border-left: 0.25rem solid #36b9cc !important;
+}
+
+.border-left-warning {
+    border-left: 0.25rem solid #f6c23e !important;
+}
+
+.text-xs {
+    font-size: 0.7rem;
+}
+
+/* Main content area */
+main {
+    padding-top: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 767.98px) {
+    .sidebar {
+        min-height: auto;
+    }
+    
+    main {
+        margin-top: 1rem;
+    }
+}
+</style>
+
+<script>
+// Real uptime tracking based on server start time
+const serverStartTime = new Date('{{ system_info.app_start_time.isoformat() }}Z');
+let baseUptimeHours = {{ system_info.uptime_hours }};
+let baseUptimeMinutes = {{ system_info.uptime_minutes }};
+const pageLoadTime = new Date();
+
+function updateUptime() {
+    const now = new Date();
+    const timeSincePageLoad = now - pageLoadTime;
+    const additionalMinutes = Math.floor(timeSincePageLoad / (1000 * 60));
+    
+    let totalMinutes = baseUptimeMinutes + additionalMinutes;
+    let totalHours = baseUptimeHours + Math.floor(totalMinutes / 60);
+    totalMinutes = totalMinutes % 60;
+    
+    document.getElementById('uptime').textContent = `${totalHours}h ${totalMinutes}m`;
+}
+
+// Update uptime every minute
+setInterval(updateUptime, 60000);
+updateUptime(); // Initial call
+</script>
+{% endblock %}

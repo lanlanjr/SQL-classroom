@@ -83,7 +83,15 @@ teacher = Blueprint('teacher', __name__, url_prefix='/teacher')
 
 @teacher.before_request
 def check_teacher():
-    if not current_user.is_authenticated or not current_user.is_teacher():
+    if not current_user.is_authenticated:
+        flash('Access denied. You must be a teacher to view this page.', 'danger')
+        return redirect(url_for('main.index'))
+    
+    if not current_user.is_active:
+        flash('Access denied. Your account has been deactivated. Please contact an administrator.', 'danger')
+        return redirect(url_for('main.index'))
+    
+    if not current_user.is_teacher():
         flash('Access denied. You must be a teacher to view this page.', 'danger')
         return redirect(url_for('main.index'))
 
@@ -1472,10 +1480,17 @@ def get_schema(schema_id):
 @login_required
 @teacher_required
 def use_schema(schema_id):
+    from app.utils import generate_schema_prefix, parse_schema_statements, modify_create_table_statement, get_prefixed_table_name
+    
     schema = SchemaImport.query.get_or_404(schema_id)
     if schema.created_by != current_user.id:
         abort(403)
         
+    debug_log = []
+    debug_log.append(f"Starting schema deployment for schema ID: {schema_id}")
+    debug_log.append(f"Schema name: {schema.name}")
+    debug_log.append(f"Schema content length: {len(schema.schema_content) if schema.schema_content else 0}")
+    
     try:
         # Connect to the sql_classroom database
         connection = pymysql.connect(
@@ -1487,63 +1502,178 @@ def use_schema(schema_id):
             connect_timeout=30
         )
         
+        debug_log.append("Successfully connected to sql_classroom database")
+        
         with connection.cursor() as cursor:
-            # Generate a unique prefix for table names using the teacher's ID and schema ID
-            table_prefix = f"teacher_{current_user.id}_schema_{schema.id}_"
+            # Generate a unique prefix for table names
+            table_prefix = generate_schema_prefix(current_user.id, schema.id)
+            debug_log.append(f"Generated table prefix: {table_prefix}")
             
             # First, drop any existing tables with this prefix
             cursor.execute("SHOW TABLES")
             all_tables = [row[0] for row in cursor.fetchall()]
             tables_to_drop = [table for table in all_tables if table.startswith(table_prefix)]
+            debug_log.append(f"Found {len(tables_to_drop)} existing tables to drop: {tables_to_drop}")
+            
+            # Disable foreign key checks to allow dropping tables with foreign key constraints
+            if tables_to_drop:
+                cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+                debug_log.append("Disabled foreign key checks for table dropping")
             
             for table in tables_to_drop:
                 cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
+                debug_log.append(f"Dropped table: {table}")
             
-            # Parse and modify schema statements to add prefix to table names
-            statements = [stmt.strip() for stmt in schema.schema_content.split(';') if stmt.strip()]
+            # Re-enable foreign key checks
+            if tables_to_drop:
+                cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+                debug_log.append("Re-enabled foreign key checks")
+            
+            # Parse schema statements
+            statements = parse_schema_statements(schema.schema_content)
+            debug_log.append(f"Parsed {len(statements)} statements from schema content")
+            
             created_tables = []
+            table_mappings = {}  # Original table name -> prefixed table name
             
-            # Execute statements with modified table names
-            for stmt in statements:
-                try:
-                    # Add prefix to CREATE TABLE statements
-                    if stmt.upper().strip().startswith('CREATE TABLE'):
-                        # Extract table name
-                        table_name = stmt[stmt.find('TABLE') + 5:].strip().split()[0].strip('`')
-                        prefixed_table = f"{table_prefix}{table_name}"
-                        # Replace table name with prefixed version
-                        modified_stmt = stmt.replace(f'TABLE {table_name}', f'TABLE `{prefixed_table}`')
+            # First pass: Create tables with prefixed names
+            create_table_statements = []
+            for i, stmt in enumerate(statements):
+                debug_log.append(f"Processing statement {i+1}: {stmt[:100]}...")
+                
+                if stmt.upper().strip().startswith('CREATE TABLE'):
+                    create_table_statements.append(stmt)
+                    debug_log.append(f"Found CREATE TABLE statement {len(create_table_statements)}")
+                    
+                    try:
+                        # Extract original table name for mapping
+                        table_start = stmt.upper().find('TABLE') + 5
+                        table_part = stmt[table_start:].strip()
+                        original_table = table_part.split()[0].strip('`').rstrip('(').strip('`')
+                        debug_log.append(f"Extracted original table name: '{original_table}'")
+                        
+                        # Create prefixed table name
+                        prefixed_table = get_prefixed_table_name(table_prefix, original_table)
+                        table_mappings[original_table] = prefixed_table
+                        debug_log.append(f"Mapped '{original_table}' -> '{prefixed_table}'")
+                        
+                        # Modify the CREATE TABLE statement
+                        modified_stmt = modify_create_table_statement(stmt, table_prefix)
+                        debug_log.append(f"Modified statement preview: {modified_stmt[:150]}...")
+                        
                         cursor.execute(modified_stmt)
                         created_tables.append(prefixed_table)
-                    # Add prefix to other statements (INSERT, etc.)
-                    else:
-                        for table in all_tables:
-                            if table in stmt:
-                                modified_stmt = stmt.replace(table, f"`{table_prefix}{table}`")
-                                cursor.execute(modified_stmt)
-                except pymysql.Error as e:
-                    print(f"Error executing statement: {str(e)}")
-                    # Continue with other statements
+                        debug_log.append(f"Successfully created table: {prefixed_table}")
+                        
+                    except pymysql.Error as e:
+                        error_msg = f"Error creating table from statement {i+1}: {str(e)}"
+                        debug_log.append(error_msg)
+                        print(error_msg)
+                        # Continue with other statements
+                    except Exception as e:
+                        error_msg = f"Unexpected error processing CREATE TABLE {i+1}: {str(e)}"
+                        debug_log.append(error_msg)
+                        print(error_msg)
             
-            # Grant permissions to sql_student user for each created table
-            for table in created_tables:
-                try:
-                    grant_stmt = f"GRANT SELECT ON `sql_classroom`.`{table}` TO 'sql_student'@'localhost'"
-                    cursor.execute(grant_stmt)
-                except pymysql.Error as e:
-                    print(f"Error granting permissions for table {table}: {str(e)}")
+            debug_log.append(f"Total CREATE TABLE statements found: {len(create_table_statements)}")
+            debug_log.append(f"Total tables created: {len(created_tables)}")
+            debug_log.append(f"Created tables: {created_tables}")
+            
+            # Second pass: Handle INSERT and other statements with table references
+            non_create_statements = 0
+            for i, stmt in enumerate(statements):
+                if not stmt.upper().strip().startswith('CREATE TABLE'):
+                    non_create_statements += 1
+                    try:
+                        modified_stmt = stmt
+                        replacements_made = 0
+                        
+                        # Replace table names in the statement with prefixed versions
+                        for original_table, prefixed_table in table_mappings.items():
+                            # Handle both backticked and non-backticked table names properly
+                            import re
+                            
+                            # First replace backticked table names: `tablename`
+                            backticked_pattern = r'`' + re.escape(original_table) + r'`'
+                            old_stmt = modified_stmt
+                            modified_stmt = re.sub(backticked_pattern, f"`{prefixed_table}`", modified_stmt, flags=re.IGNORECASE)
+                            if old_stmt != modified_stmt:
+                                replacements_made += 1
+                            
+                            # Then replace non-backticked table names with word boundaries
+                            word_boundary_pattern = r'\b' + re.escape(original_table) + r'\b'
+                            old_stmt = modified_stmt
+                            modified_stmt = re.sub(word_boundary_pattern, f"`{prefixed_table}`", modified_stmt, flags=re.IGNORECASE)
+                            if old_stmt != modified_stmt:
+                                replacements_made += 1
+                        
+                        if modified_stmt != stmt:  # Only execute if we made changes
+                            cursor.execute(modified_stmt)
+                            debug_log.append(f"Executed non-CREATE statement with {replacements_made} table name replacements")
+                        elif stmt.strip():  # Execute original if it's not empty and no replacements needed
+                            cursor.execute(stmt)
+                            debug_log.append(f"Executed original non-CREATE statement (no table references)")
+                            
+                    except pymysql.Error as e:
+                        error_msg = f"Error executing non-CREATE statement {i+1}: {str(e)}"
+                        debug_log.append(error_msg)
+                        print(error_msg)
+                        # Continue with other statements
+            
+            debug_log.append(f"Processed {non_create_statements} non-CREATE statements")
+            
+            # Grant permissions to sql_student user for each created table (optional)
+            # This can be disabled if the database user doesn't have GRANT privileges
+            enable_permission_granting = os.environ.get('ENABLE_PERMISSION_GRANTING', 'true').lower() == 'true'
+            
+            if enable_permission_granting:
+                permissions_granted = 0
+                permission_errors = 0
+                for table in created_tables:
+                    try:
+                        grant_stmt = f"GRANT SELECT ON `sql_classroom`.`{table}` TO 'sql_student'@'localhost'"
+                        cursor.execute(grant_stmt)
+                        permissions_granted += 1
+                        debug_log.append(f"Granted SELECT permission on table: {table}")
+                    except pymysql.Error as e:
+                        permission_errors += 1
+                        error_msg = f"Warning: Could not grant permissions for table {table}: {str(e)}"
+                        debug_log.append(error_msg)
+                        # Don't print this as an error since it's not critical
+                        if permission_errors <= 3:  # Only show first few warnings
+                            print(f"⚠️  {error_msg}")
+                
+                if permissions_granted > 0:
+                    debug_log.append(f"✅ Granted permissions on {permissions_granted} tables")
+                if permission_errors > 0:
+                    debug_log.append(f"⚠️  Permission warnings for {permission_errors} tables (not critical)")
+                    print(f"⚠️  Note: Permission granting failed for {permission_errors} tables. This is usually due to database user privileges but doesn't affect functionality.")
+            else:
+                debug_log.append("ℹ️  Permission granting disabled via configuration")
             
             cursor.execute("FLUSH PRIVILEGES")
             connection.commit()
+            debug_log.append("Committed transaction and flushed privileges")
             
             # Update the schema record with the table prefix
             schema.active_schema_name = table_prefix
             db.session.commit()
+            debug_log.append(f"Updated schema record with active_schema_name: {table_prefix}")
+            
+            # Final verification - check what tables actually exist
+            cursor.execute("SHOW TABLES")
+            final_tables = [row[0] for row in cursor.fetchall()]
+            final_prefixed_tables = [t for t in final_tables if t.startswith(table_prefix)]
+            debug_log.append(f"Final verification: {len(final_prefixed_tables)} tables exist with prefix {table_prefix}")
+            debug_log.append(f"Final tables: {final_prefixed_tables}")
             
             return jsonify({
                 'success': True, 
                 'table_prefix': table_prefix,
-                'tables_created': created_tables
+                'tables_created': created_tables,
+                'tables_verified': final_prefixed_tables,
+                'debug_log': debug_log,
+                'message': f'Schema successfully deployed to sql_classroom database with prefix: {table_prefix}'
             })
             
     except Exception as e:
@@ -1575,7 +1705,8 @@ def delete_schema(schema_id):
         # Store the name for the success message
         schema_name = schema.name
         
-        # Delete the schema from MySQL if it exists
+        # Delete the prefixed tables from sql_classroom database if they exist
+        tables_deleted = []
         if schema.active_schema_name:
             try:
                 connection = pymysql.connect(
@@ -1583,26 +1714,408 @@ def delete_schema(schema_id):
                     user=os.environ.get('MYSQL_USER', 'root'),
                     password=os.environ.get('MYSQL_PASSWORD', 'admin'),
                     port=int(os.environ.get('MYSQL_PORT', 3306)),
+                    database='sql_classroom',  # Connect to sql_classroom database
                     connect_timeout=30
                 )
                 
                 with connection.cursor() as cursor:
-                    cursor.execute(f"DROP SCHEMA IF EXISTS {schema.active_schema_name}")
+                    # Get all tables with this schema's prefix
+                    cursor.execute("SHOW TABLES")
+                    all_tables = [row[0] for row in cursor.fetchall()]
+                    tables_to_delete = [table for table in all_tables if table.startswith(schema.active_schema_name)]
+                    
+                    # Disable foreign key checks to allow dropping tables with foreign key constraints
+                    if tables_to_delete:
+                        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+                        print(f"Disabled foreign key checks for deleting {len(tables_to_delete)} tables")
+                    
+                    # Drop each prefixed table
+                    for table in tables_to_delete:
+                        try:
+                            cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
+                            tables_deleted.append(table)
+                            print(f"Deleted table: {table}")
+                        except Exception as e:
+                            print(f"Error deleting table {table}: {str(e)}")
+                    
+                    # Re-enable foreign key checks
+                    if tables_to_delete:
+                        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+                        print("Re-enabled foreign key checks")
+                    
+                    connection.commit()
+                    print(f"Successfully deleted {len(tables_deleted)} tables with prefix: {schema.active_schema_name}")
+                
                 connection.close()
+                
             except Exception as e:
-                print(f"Error deleting MySQL schema: {str(e)}")
-                # Continue with deletion even if MySQL cleanup fails
+                print(f"Error deleting tables from sql_classroom database: {str(e)}")
+                # Continue with schema deletion even if table cleanup fails
         
-        # Delete the schema record
+        # Delete the schema record from the database
         db.session.delete(schema)
         db.session.commit()
         
-        flash(f'Schema "{schema_name}" has been successfully deleted.', 'success')
+        if tables_deleted:
+            flash(f'Schema "{schema_name}" and {len(tables_deleted)} associated tables have been successfully deleted.', 'success')
+        else:
+            flash(f'Schema "{schema_name}" has been successfully deleted.', 'success')
+            
     except Exception as e:
         db.session.rollback()
         flash(f'An error occurred while deleting the schema: {str(e)}', 'danger')
     
     return redirect(url_for('teacher.import_schema'))
+
+
+@teacher.route('/admin/schema-monitor')
+@login_required
+@teacher_required
+def schema_monitor():
+    """Monitor all schemas in the system (admin view)"""
+    # Only allow admin users to access this view
+    if not current_user.role == 'admin':
+        flash('Access denied. Admin privileges required.', 'danger')
+        return redirect(url_for('teacher.dashboard'))
+    
+    try:
+        # Get all schemas
+        schemas = SchemaImport.query.all()
+        
+        # Get table statistics from MySQL
+        connection = pymysql.connect(
+            host=os.environ.get('MYSQL_HOST', 'localhost'),
+            user=os.environ.get('MYSQL_USER', 'root'),
+            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            database='sql_classroom',
+            connect_timeout=30
+        )
+        
+        schema_stats = []
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW TABLES")
+            all_tables = [row[0] for row in cursor.fetchall()]
+            
+            for schema in schemas:
+                if schema.active_schema_name:
+                    # Count tables for this schema
+                    schema_tables = [t for t in all_tables if t.startswith(schema.active_schema_name)]
+                    
+                    # Get table sizes
+                    total_size = 0
+                    for table in schema_tables:
+                        try:
+                            cursor.execute(f"""
+                                SELECT ROUND(((data_length + index_length) / 1024 / 1024), 2) AS 'size_mb'
+                                FROM information_schema.TABLES 
+                                WHERE table_schema='sql_classroom' AND table_name='{table}'
+                            """)
+                            result = cursor.fetchone()
+                            if result and result[0]:
+                                total_size += float(result[0])
+                        except:
+                            pass
+                    
+                    schema_stats.append({
+                        'schema': schema,
+                        'table_count': len(schema_tables),
+                        'size_mb': round(total_size, 2),
+                        'tables': schema_tables
+                    })
+        
+        connection.close()
+        
+        return render_template('teacher/schema_monitor.html', schema_stats=schema_stats)
+        
+    except Exception as e:
+        flash(f'Error loading schema statistics: {str(e)}', 'danger')
+        return redirect(url_for('teacher.dashboard'))
+
+
+@teacher.route('/debug/question/<int:question_id>')
+@login_required
+@teacher_required
+def debug_question(question_id):
+    """Debug route to check question and schema import configuration"""
+    question = Question.query.get_or_404(question_id)
+    
+    # Check ownership
+    if question.author_id != current_user.id:
+        flash('You can only debug your own questions.', 'danger')
+        return redirect(url_for('teacher.dashboard'))
+    
+    debug_info = {
+        'question': {
+            'id': question.id,
+            'title': question.title,
+            'db_type': question.db_type,
+            'schema_import_id': question.schema_import_id,
+        }
+    }
+    
+    if question.db_type == 'imported_schema':
+        if question.schema_import:
+            debug_info['schema_import'] = {
+                'id': question.schema_import.id,
+                'name': question.schema_import.name,
+                'active_schema_name': question.schema_import.active_schema_name,
+                'created_by': question.schema_import.created_by,
+                'content_length': len(question.schema_import.schema_content) if question.schema_import.schema_content else 0
+            }
+            
+            # Check if tables exist in database
+            try:
+                import pymysql
+                connection = pymysql.connect(
+                    host=os.environ.get('MYSQL_HOST', 'localhost'),
+                    user=os.environ.get('MYSQL_USER', 'root'),
+                    password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                    port=int(os.environ.get('MYSQL_PORT', 3306)),
+                    database='sql_classroom',
+                    connect_timeout=30
+                )
+                
+                with connection.cursor() as cursor:
+                    cursor.execute("SHOW TABLES")
+                    all_tables = [row[0] for row in cursor.fetchall()]
+                    
+                    # Find tables with this schema's prefix
+                    prefix = question.schema_import.active_schema_name
+                    schema_tables = [t for t in all_tables if t.startswith(prefix)] if prefix else []
+                    
+                    debug_info['database_tables'] = {
+                        'total_tables': len(all_tables),
+                        'schema_tables': schema_tables,
+                        'table_count': len(schema_tables)
+                    }
+                
+                connection.close()
+                
+            except Exception as e:
+                debug_info['database_error'] = str(e)
+        else:
+            debug_info['schema_import'] = None
+    
+    return jsonify(debug_info)
+
+
+@teacher.route('/test-schema-query', methods=['POST'])
+@login_required
+@csrf.exempt
+def test_schema_query():
+    """Quick test endpoint to verify schema query modification"""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    question_id = data.get('question_id')
+    test_query = data.get('query', 'SELECT * FROM students LIMIT 5')
+    
+    if not question_id:
+        return jsonify({'error': 'Question ID required'}), 400
+    
+    question = Question.query.get(question_id)
+    if not question:
+        return jsonify({'error': 'Question not found'}), 404
+    
+    if question.author_id != current_user.id:
+        return jsonify({'error': 'Access denied'}), 403
+    
+    debug_info = {
+        'question_id': question.id,
+        'db_type': question.db_type,
+        'schema_import_id': question.schema_import_id,
+        'original_query': test_query
+    }
+    
+    if question.db_type == 'imported_schema':
+        # Get table prefix
+        table_prefix = question.get_table_prefix()
+        debug_info['table_prefix'] = table_prefix
+        
+        if question.schema_import:
+            debug_info['schema_import'] = {
+                'id': question.schema_import.id,
+                'name': question.schema_import.name,
+                'active_schema_name': question.schema_import.active_schema_name
+            }
+            
+            if table_prefix:
+                # Try to modify the query
+                from app.utils import parse_schema_statements
+                schema_content = question.schema_import.schema_content
+                statements = parse_schema_statements(schema_content)
+                table_names = []
+                
+                for stmt in statements:
+                    if stmt.upper().strip().startswith('CREATE TABLE'):
+                        table_start = stmt.upper().find('TABLE') + 5
+                        table_part = stmt[table_start:].strip()
+                        table_name = table_part.split()[0].strip('`').rstrip('(').strip('`')
+                        table_names.append(table_name)
+                
+                debug_info['table_names'] = table_names
+                
+                # Modify query
+                import re
+                modified_query = test_query
+                replacements = []
+                
+                for table_name in table_names:
+                    pattern = r'\b' + re.escape(table_name) + r'\b'
+                    prefixed_table = f"{table_prefix}{table_name}"
+                    old_query = modified_query
+                    modified_query = re.sub(pattern, prefixed_table, modified_query, flags=re.IGNORECASE)
+                    
+                    if old_query != modified_query:
+                        replacements.append(f"{table_name} -> {prefixed_table}")
+                
+                debug_info['modified_query'] = modified_query
+                debug_info['replacements'] = replacements
+                
+                # Try to execute the query
+                try:
+                    import pymysql
+                    connection = pymysql.connect(
+                        host=os.environ.get('MYSQL_HOST', 'localhost'),
+                        user=os.environ.get('MYSQL_USER', 'root'),
+                        password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                        port=int(os.environ.get('MYSQL_PORT', 3306)),
+                        database='sql_classroom',
+                        cursorclass=pymysql.cursors.DictCursor
+                    )
+                    
+                    with connection.cursor() as cursor:
+                        cursor.execute(modified_query)
+                        if cursor.description:
+                            results = cursor.fetchall()
+                            debug_info['query_results'] = {
+                                'columns': [col[0] for col in cursor.description],
+                                'row_count': len(results),
+                                'sample_rows': results[:3]  # First 3 rows
+                            }
+                        else:
+                            debug_info['query_results'] = 'No results (non-SELECT query)'
+                    
+                    connection.close()
+                    debug_info['execution_success'] = True
+                    
+                except Exception as e:
+                    debug_info['execution_error'] = str(e)
+                    debug_info['execution_success'] = False
+            else:
+                debug_info['error'] = 'No table prefix - schema not deployed'
+        else:
+            debug_info['error'] = 'No schema import found'
+    else:
+        debug_info['error'] = f'Not an imported schema (db_type: {question.db_type})'
+    
+    return jsonify(debug_info)
+
+
+@teacher.route('/schema-status')
+@login_required
+@teacher_required  
+def schema_status():
+    """Show status of all schemas for current teacher"""
+    schemas = SchemaImport.query.filter_by(created_by=current_user.id).order_by(SchemaImport.created_at.desc()).all()
+    
+    schema_info = []
+    for schema in schemas:
+        info = {
+            'id': schema.id,
+            'name': schema.name,
+            'description': schema.description,
+            'active_schema_name': schema.active_schema_name,
+            'is_deployed': bool(schema.active_schema_name),
+            'created_at': schema.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'table_count': 0,
+            'tables': []
+        }
+        
+        # Check actual tables in database if deployed
+        if schema.active_schema_name:
+            try:
+                import pymysql
+                connection = pymysql.connect(
+                    host=os.environ.get('MYSQL_HOST', 'localhost'),
+                    user=os.environ.get('MYSQL_USER', 'root'),
+                    password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                    port=int(os.environ.get('MYSQL_PORT', 3306)),
+                    database='sql_classroom',
+                    connect_timeout=30
+                )
+                
+                with connection.cursor() as cursor:
+                    cursor.execute("SHOW TABLES")
+                    all_tables = [row[0] for row in cursor.fetchall()]
+                    
+                    # Filter tables with this schema's prefix
+                    schema_tables = [t for t in all_tables if t.startswith(schema.active_schema_name)]
+                    info['table_count'] = len(schema_tables)
+                    info['tables'] = schema_tables
+                
+                connection.close()
+                
+            except Exception as e:
+                info['database_error'] = str(e)
+        
+        schema_info.append(info)
+    
+    return render_template('teacher/schema_status.html', schemas=schema_info)
+
+
+@teacher.route('/schema/<int:schema_id>/content')
+@login_required
+@teacher_required
+def view_schema_content(schema_id):
+    """View the raw content of a schema for debugging"""
+    schema = SchemaImport.query.get_or_404(schema_id)
+    
+    if schema.created_by != current_user.id:
+        flash('Access denied.', 'danger')
+        return redirect(url_for('teacher.import_schema'))
+    
+    # Parse the schema to show structure
+    from app.utils import parse_schema_statements
+    statements = parse_schema_statements(schema.schema_content)
+    
+    parsed_info = {
+        'total_statements': len(statements),
+        'create_tables': [],
+        'other_statements': []
+    }
+    
+    for stmt in statements:
+        if stmt.upper().strip().startswith('CREATE TABLE'):
+            # Extract table name
+            try:
+                table_start = stmt.upper().find('TABLE') + 5
+                table_part = stmt[table_start:].strip()
+                table_name = table_part.split()[0].strip('`').rstrip('(').strip('`')
+                parsed_info['create_tables'].append({
+                    'name': table_name,
+                    'statement': stmt[:200] + '...' if len(stmt) > 200 else stmt
+                })
+            except Exception as e:
+                parsed_info['create_tables'].append({
+                    'name': f'ERROR: {str(e)}',
+                    'statement': stmt[:200] + '...' if len(stmt) > 200 else stmt
+                })
+        else:
+            parsed_info['other_statements'].append(stmt[:100] + '...' if len(stmt) > 100 else stmt)
+    
+    return jsonify({
+        'schema': {
+            'id': schema.id,
+            'name': schema.name,
+            'active_schema_name': schema.active_schema_name,
+            'content_length': len(schema.schema_content)
+        },
+        'content': schema.schema_content,
+        'parsed': parsed_info
+    })
 
 @teacher.route('/api/preview-question', methods=['POST'])
 @login_required
@@ -1682,7 +2195,10 @@ def preview_question():
                     )
                 else:  # imported_schema
                     if not preview_question.schema_import:
-                        return jsonify({'error': 'Invalid or missing schema import'}), 400
+                        return jsonify({'error': 'Invalid or missing schema import. Please ensure the schema is properly imported and deployed.'}), 400
+                    
+                    if not preview_question.schema_import.active_schema_name:
+                        return jsonify({'error': 'Schema import exists but is not deployed. Please use the "Use" button to deploy the schema first.'}), 400
                     
                     # Get the actual database name from the schema import
                     imported_schema_name = preview_question.schema_import.active_schema_name
@@ -1699,21 +2215,54 @@ def preview_question():
                     
                     # Modify query to use table prefixes if needed
                     table_prefix = preview_question.get_table_prefix()
+                    print(f"[DEBUG] Teacher Test - Table prefix: {table_prefix}")
+                    
                     if table_prefix:
                         # Get all table names from the schema content
                         schema_content = preview_question.schema_import.schema_content
+                        print(f"[DEBUG] Schema content length: {len(schema_content)}")
+                        print(f"[DEBUG] Schema content preview: {schema_content[:200]}...")
+                        
                         table_names = []
-                        for line in schema_content.split('\n'):
-                            if 'CREATE TABLE' in line.upper():
-                                # Extract table name
-                                table_name = line[line.find('TABLE') + 5:].strip().split()[0].strip('`')
+                        
+                        # Parse CREATE TABLE statements to extract table names
+                        from app.utils import parse_schema_statements
+                        statements = parse_schema_statements(schema_content)
+                        print(f"[DEBUG] Parsed {len(statements)} statements")
+                        
+                        for i, stmt in enumerate(statements):
+                            print(f"[DEBUG] Statement {i}: {stmt[:100]}...")
+                            if stmt.upper().strip().startswith('CREATE TABLE'):
+                                print(f"[DEBUG] Found CREATE TABLE statement")
+                                # Extract table name using the same logic as import
+                                table_start = stmt.upper().find('TABLE') + 5
+                                table_part = stmt[table_start:].strip()
+                                print(f"[DEBUG] Table part after 'TABLE': '{table_part[:50]}...'")
+                                table_name = table_part.split()[0].strip('`').rstrip('(').strip('`')
+                                print(f"[DEBUG] Extracted table name: '{table_name}'")
                                 table_names.append(table_name)
                         
-                        # Replace table names with prefixed versions in the query
+                        print(f"[DEBUG] Found table names: {table_names}")
+                        print(f"[DEBUG] Original query: {query}")
+                        
+                        # Replace table names with prefixed versions in the query using word boundaries
+                        import re
                         modified_query = query
                         for table_name in table_names:
-                            modified_query = modified_query.replace(table_name, f"{table_prefix}{table_name}")
+                            # Use word boundaries to avoid partial matches
+                            pattern = r'\b' + re.escape(table_name) + r'\b'
+                            prefixed_table = f"{table_prefix}{table_name}"
+                            old_query = modified_query
+                            modified_query = re.sub(pattern, prefixed_table, modified_query, flags=re.IGNORECASE)
+                            if old_query != modified_query:
+                                print(f"[DEBUG] Replacing '{table_name}' with '{prefixed_table}': SUCCESS")
+                            else:
+                                print(f"[DEBUG] No replacement made for '{table_name}' in query")
+                        
                         query = modified_query
+                        print(f"[DEBUG] Modified query: {query}")
+                    else:
+                        print("[DEBUG] No table prefix found - schema may not be deployed")
                 
                 # Execute query and fetch results
                 with connection.cursor() as cursor:
@@ -2375,15 +2924,74 @@ def playground_execute():
         from app.utils import validate_dql_only_query
         validate_dql_only_query(query)
         
+        # Check if database access is allowed
+        from app.models import AllowedDatabase
+        from app.models.schema_import import SchemaImport
+        
+        # Check if database is in allowed list
+        is_allowed_database = AllowedDatabase.is_database_allowed(database_name)
+        
+        # Check if this is a teacher's own imported schema name
+        is_teacher_schema_access = False
+        selected_schema = None
+        actual_database_name = database_name  # Will be the actual database to connect to
+        
+        if not is_allowed_database:
+            # Check if the database_name is actually a schema name created by this teacher
+            teacher_schema = SchemaImport.query.filter_by(
+                created_by=current_user.id,
+                name=database_name
+            ).filter(SchemaImport.active_schema_name.isnot(None)).first()
+            
+            if teacher_schema:
+                is_teacher_schema_access = True
+                selected_schema = teacher_schema
+                actual_database_name = 'sql_classroom'  # Connect to sql_classroom for schema access
+        
+        # Allow access if it's an allowed database OR teacher's own schema
+        if not (is_allowed_database or is_teacher_schema_access):
+            # Get list of allowed databases for error message
+            allowed_databases = AllowedDatabase.get_active_database_names()
+            error_msg = f'Access to database "{database_name}" is not allowed.'
+            
+            if allowed_databases:
+                db_list = ', '.join(allowed_databases)
+                # Also mention schema names if teacher has schemas
+                try:
+                    teacher_schemas = SchemaImport.query.filter_by(created_by=current_user.id).filter(
+                        SchemaImport.active_schema_name.isnot(None)
+                    ).all()
+                    if teacher_schemas:
+                        schema_names = [schema.name for schema in teacher_schemas]
+                        db_list += ', ' + ', '.join(schema_names) + ' (your schemas)'
+                except:
+                    pass
+                
+                error_msg += f' Available options: {db_list}'
+                
+            return jsonify({'error': error_msg}), 403
+        
+        # For imported schema access, check if we need to rewrite table names
+        if selected_schema:
+            # Use the selected schema for query rewriting
+            table_prefix = selected_schema.active_schema_name
+            schema_content = selected_schema.schema_content
+            
+            print(f"[DEBUG] Teacher Playground - Using selected schema: {selected_schema.name}, prefix: {table_prefix}")
+            
+            # Apply query rewriting using utility function
+            from app.utils import rewrite_query_for_schema
+            query = rewrite_query_for_schema(query, schema_content, table_prefix)
+        
         # Teachers now have the same query restrictions as students for security
         try:
-            # Connect to MySQL using the provided database name
+            # Connect to MySQL using the actual database name (may be sql_classroom for schema access)
             conn = pymysql.connect(
                 host=os.environ.get('MYSQL_HOST', 'localhost'),
                 user=os.environ.get('MYSQL_USER', 'root'),
                 password=os.environ.get('MYSQL_PASSWORD', 'admin'),
                 port=int(os.environ.get('MYSQL_PORT', 3306)),
-                database=database_name,
+                database=actual_database_name,
                 cursorclass=pymysql.cursors.DictCursor
             )
             
@@ -2414,6 +3022,30 @@ def playground_execute():
                         # Ensure values are in the same order as columns
                         row_values = [serializable_row.get(col) for col in columns]
                         rows.append(row_values)
+                    
+                    # Check if this is a SHOW TABLES query on an imported schema
+                    from app.utils import is_show_tables_query, process_show_tables_result_for_schema, is_show_databases_query, filter_show_databases_result_for_user
+                    if is_show_tables_query(query):
+                        if selected_schema:
+                            # Filter tables for the specific selected schema
+                            prefix = selected_schema.active_schema_name
+                            # Filter tables to only show those belonging to this schema
+                            filtered_rows = []
+                            for row in rows:
+                                table_name = row[0]
+                                if table_name.startswith(prefix):
+                                    # Remove the prefix to show the original table name
+                                    original_name = table_name[len(prefix):]
+                                    filtered_rows.append([original_name])
+                            rows = filtered_rows
+                        else:
+                            # For regular databases, use the standard filtering
+                            columns, rows = process_show_tables_result_for_schema(
+                                columns, rows, database_name, current_user.id
+                            )
+                    elif is_show_databases_query(query):
+                        # Filter SHOW DATABASES result to include allowed databases and teacher's schemas
+                        columns, rows = filter_show_databases_result_for_user(columns, rows, current_user)
                     
                     result = {
                         'columns': columns,
@@ -2456,7 +3088,37 @@ def playground_execute():
 def get_available_databases():
     """API endpoint to get a list of available MySQL databases."""
     try:
-        # Connect to MySQL using root credentials
+        from app.models import AllowedDatabase
+        from app.models.schema_import import SchemaImport
+        
+        available_databases = []
+        
+        # First check if there are any allowed databases configured by admin
+        allowed_databases = AllowedDatabase.get_active_database_names()
+        if allowed_databases:
+            available_databases.extend(allowed_databases)
+        
+        # Add teacher's own imported schemas
+        try:
+            teacher_schemas = SchemaImport.query.filter_by(created_by=current_user.id).filter(
+                SchemaImport.active_schema_name.isnot(None)
+            ).all()
+            
+            # Add each schema's name as an available database option
+            for schema in teacher_schemas:
+                schema_name = schema.name
+                if schema_name not in available_databases:
+                    available_databases.append(schema_name)
+        except Exception as e:
+            print(f"Error checking teacher schemas: {e}")
+        
+        # If we have databases to show (either allowed or teacher schemas), return them
+        if available_databases:
+            available_databases.sort()
+            return jsonify({'databases': available_databases})
+        
+        # Fallback: if no allowed databases configured and no teacher schemas,
+        # return all databases except system ones (backward compatibility)
         conn = pymysql.connect(
             host=os.environ.get('MYSQL_HOST', 'localhost'),
             user=os.environ.get('MYSQL_USER', 'root'),

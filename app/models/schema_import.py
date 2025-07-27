@@ -1,5 +1,6 @@
 from app import db
 from datetime import datetime
+from sqlalchemy.dialects.mysql import LONGTEXT
 
 class SchemaImport(db.Model):
     __tablename__ = 'schema_imports'
@@ -7,7 +8,7 @@ class SchemaImport(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    schema_content = db.Column(db.Text, nullable=False)  # The actual SQL schema content
+    schema_content = db.Column(LONGTEXT, nullable=False)  # Use LONGTEXT for large schema files (up to 4GB)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     is_template = db.Column(db.Boolean, default=False)  # Whether this is a template schema
