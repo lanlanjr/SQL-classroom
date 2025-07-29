@@ -37,7 +37,8 @@ def create_app(*args, **kwargs):
     
     # Configure the app
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_for_development')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI', f'mysql+pymysql://root:admin@localhost:3306/{app_db_name}')
+    # app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI', f'mysql+pymysql://root:admin@localhost:3306/{app_db_name}')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI', '')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['WTF_CSRF_ENABLED'] = True
     
