@@ -1,5 +1,8 @@
 from app import create_app, db
 from app.models import User, Question, Assignment, AssignmentQuestion, Submission
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = create_app()
 
