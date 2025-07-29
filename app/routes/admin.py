@@ -256,10 +256,10 @@ def system_info():
     uptime_minutes = int((uptime_delta.total_seconds() % 3600) // 60)
     
     system_info = {
-        'flask_env': os.environ.get('APP_ENV', 'development'),
+        'flask_env': os.getenv('APP_ENV', 'development'),
         'debug_mode': current_app.debug,
-        'database_uri': os.environ.get('DATABASE_URI', 'Not set'),
-        'app_db_name': os.environ.get('APP_DB_NAME', 'sql_classroom'),
+        'database_uri': os.getenv('DATABASE_URI', 'Not set'),
+        'app_db_name': os.getenv('APP_DB_NAME', 'sql_classroom'),
         'python_version': sys.version,
         'current_time': current_time,
         'app_start_time': app_start_time,
@@ -403,7 +403,7 @@ def database_backup():
         os.makedirs(os.path.dirname(backup_path), exist_ok=True)
         
         # Get database connection info
-        db_uri = os.environ.get('DATABASE_URI', '')
+        db_uri = os.getenv('DATABASE_URI', '')
         if 'mysql' in db_uri:
             # Parse MySQL connection string
             # Format: mysql+pymysql://user:password@host:port/database
@@ -665,10 +665,10 @@ def manage_allowed_databases():
             # Check if database actually exists
             try:
                 conn = pymysql.connect(
-                    host=os.environ.get('MYSQL_HOST', ''),
-                    user=os.environ.get('MYSQL_USER', ''),
-                    password=os.environ.get('MYSQL_PASSWORD', ''),
-                    port=int(os.environ.get('MYSQL_PORT', 3306)),
+                    host=os.getenv('MYSQL_HOST', ''),
+                    user=os.getenv('MYSQL_USER', ''),
+                    password=os.getenv('MYSQL_PASSWORD', ''),
+                    port=int(os.getenv('MYSQL_PORT', 3306)),
                     cursorclass=pymysql.cursors.DictCursor
                 )
                 
@@ -730,10 +730,10 @@ def manage_allowed_databases():
     # Get all available databases from MySQL for the dropdown
     try:
         conn = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', ''),
-            user=os.environ.get('MYSQL_USER', ''),
-            password=os.environ.get('MYSQL_PASSWORD', ''),
-            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            host=os.getenv('MYSQL_HOST', ''),
+            user=os.getenv('MYSQL_USER', ''),
+            password=os.getenv('MYSQL_PASSWORD', ''),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
             cursorclass=pymysql.cursors.DictCursor
         )
         
@@ -763,10 +763,10 @@ def scan_and_add_databases():
     """Scan MySQL server and add common databases to allowed list"""
     try:
         conn = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', ''),
-            user=os.environ.get('MYSQL_USER', ''),
-            password=os.environ.get('MYSQL_PASSWORD', ''),
-            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            host=os.getenv('MYSQL_HOST', ''),
+            user=os.getenv('MYSQL_USER', ''),
+            password=os.getenv('MYSQL_PASSWORD', ''),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
             cursorclass=pymysql.cursors.DictCursor
         )
         

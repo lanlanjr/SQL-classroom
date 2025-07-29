@@ -20,7 +20,7 @@ csrf = CSRFProtect()
 import logging
 
 # Check if DEBUG is False and disable logging if so
-debug_setting = os.environ.get('DEBUG', 'True').lower()
+debug_setting = os.getenv('DEBUG', 'True').lower()
 if debug_setting == 'false':
     logging.disable(logging.CRITICAL)
 
@@ -33,12 +33,12 @@ def create_app(*args, **kwargs):
     app = Flask(__name__)
     
     # Get database name from environment variable
-    app_db_name = os.environ.get('APP_DB_NAME', 'sql_classroom')
+    app_db_name = os.getenv('APP_DB_NAME', 'sql_classroom')
     
     # Configure the app
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_for_development')
-    # app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI', f'mysql+pymysql://root:admin@localhost:3306/{app_db_name}')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI', '')
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_for_development')
+    # app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', f'mysql+pymysql://root:admin@localhost:3306/{app_db_name}')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', '')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['WTF_CSRF_ENABLED'] = True
     

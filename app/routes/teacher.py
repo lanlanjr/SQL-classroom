@@ -230,10 +230,10 @@ def edit_question(question_id):
                     
                     # Try to connect to the database
                     connection = pymysql.connect(
-                        host=os.environ.get('MYSQL_HOST', ''),
-                        user=os.environ.get('MYSQL_USER', ''),
-                        password=os.environ.get('MYSQL_PASSWORD', ''),
-                        port=int(os.environ.get('MYSQL_PORT', 3306)),
+                        host=os.getenv('MYSQL_HOST', ''),
+                        user=os.getenv('MYSQL_USER', ''),
+                        password=os.getenv('MYSQL_PASSWORD', ''),
+                        port=int(os.getenv('MYSQL_PORT', 3306)),
                         database=mysql_db_name
                     )
 
@@ -1454,8 +1454,8 @@ def import_schema():
             return redirect(url_for('teacher.import_schema'))
     
     # Get prefix information from environment for the template
-    prefix_student = os.environ.get('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')
-    prefix_template = os.environ.get('TEMPLATE_DB_PREFIX', 'template_assignment_')
+    prefix_student = os.getenv('ASSIGNMENTS_DB_PREFIX', 'student_assignment_')
+    prefix_template = os.getenv('TEMPLATE_DB_PREFIX', 'template_assignment_')
     
     # Get all imported schemas
     schemas = SchemaImport.query.filter_by(created_by=current_user.id).order_by(SchemaImport.created_at.desc()).all()
@@ -1492,10 +1492,10 @@ def use_schema(schema_id):
     try:
         # Connect to the sql_classroom database
         connection = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', ''),
-            user=os.environ.get('MYSQL_USER', ''),
-            password=os.environ.get('MYSQL_PASSWORD', ''),
-            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            host=os.getenv('MYSQL_HOST', ''),
+            user=os.getenv('MYSQL_USER', ''),
+            password=os.getenv('MYSQL_PASSWORD', ''),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
             database='sql_classroom',
             connect_timeout=30
         )
@@ -1622,14 +1622,14 @@ def use_schema(schema_id):
             
             # Grant permissions to sql_student user for each created table (optional)
             # This can be disabled if the database user doesn't have GRANT privileges
-            enable_permission_granting = os.environ.get('ENABLE_PERMISSION_GRANTING', 'true').lower() == 'true'
+            enable_permission_granting = os.getenv('ENABLE_PERMISSION_GRANTING', 'true').lower() == 'true'
             
             if enable_permission_granting:
                 permissions_granted = 0
                 permission_errors = 0
                 for table in created_tables:
                     try:
-                        grant_stmt = f"GRANT SELECT ON `sql_classroom`.`{table}` TO 'sql_student'@{os.environ.get('APP_DB_NAME', '')}"
+                        grant_stmt = f"GRANT SELECT ON `sql_classroom`.`{table}` TO 'sql_student'@{os.getenv('APP_DB_NAME', '')}"
                         cursor.execute(grant_stmt)
                         permissions_granted += 1
                         debug_log.append(f"Granted SELECT permission on table: {table}")
@@ -1708,10 +1708,10 @@ def delete_schema(schema_id):
         if schema.active_schema_name:
             try:
                 connection = pymysql.connect(
-                    host=os.environ.get('MYSQL_HOST', ''),
-                    user=os.environ.get('MYSQL_USER', ''),
-                    password=os.environ.get('MYSQL_PASSWORD', ''),
-                    port=int(os.environ.get('MYSQL_PORT', 3306)),
+                    host=os.getenv('MYSQL_HOST', ''),
+                    user=os.getenv('MYSQL_USER', ''),
+                    password=os.getenv('MYSQL_PASSWORD', ''),
+                    port=int(os.getenv('MYSQL_PORT', 3306)),
                     database='sql_classroom',  # Connect to sql_classroom database
                     connect_timeout=30
                 )
@@ -1779,10 +1779,10 @@ def schema_monitor():
         
         # Get table statistics from MySQL
         connection = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', ''),
-            user=os.environ.get('MYSQL_USER', ''),
-            password=os.environ.get('MYSQL_PASSWORD', ''),
-            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            host=os.getenv('MYSQL_HOST', ''),
+            user=os.getenv('MYSQL_USER', ''),
+            password=os.getenv('MYSQL_PASSWORD', ''),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
             database='sql_classroom',
             connect_timeout=30
         )
@@ -1863,10 +1863,10 @@ def debug_question(question_id):
             try:
                 import pymysql
                 connection = pymysql.connect(
-                    host=os.environ.get('MYSQL_HOST', ''),
-                    user=os.environ.get('MYSQL_USER', ''),
-                    password=os.environ.get('MYSQL_PASSWORD', ''),
-                    port=int(os.environ.get('MYSQL_PORT', 3306)),
+                    host=os.getenv('MYSQL_HOST', ''),
+                    user=os.getenv('MYSQL_USER', ''),
+                    password=os.getenv('MYSQL_PASSWORD', ''),
+                    port=int(os.getenv('MYSQL_PORT', 3306)),
                     database='sql_classroom',
                     connect_timeout=30
                 )
@@ -1973,10 +1973,10 @@ def test_schema_query():
                 try:
                     import pymysql
                     connection = pymysql.connect(
-                        host=os.environ.get('MYSQL_HOST', ''),
-                        user=os.environ.get('MYSQL_USER', ''),
-                        password=os.environ.get('MYSQL_PASSWORD', ''),
-                        port=int(os.environ.get('MYSQL_PORT', 3306)),
+                        host=os.getenv('MYSQL_HOST', ''),
+                        user=os.getenv('MYSQL_USER', ''),
+                        password=os.getenv('MYSQL_PASSWORD', ''),
+                        port=int(os.getenv('MYSQL_PORT', 3306)),
                         database='sql_classroom',
                         cursorclass=pymysql.cursors.DictCursor
                     )
@@ -2034,10 +2034,10 @@ def schema_status():
             try:
                 import pymysql
                 connection = pymysql.connect(
-                    host=os.environ.get('MYSQL_HOST', ''),
-                    user=os.environ.get('MYSQL_USER', ''),
-                    password=os.environ.get('MYSQL_PASSWORD', ''),
-                    port=int(os.environ.get('MYSQL_PORT', 3306)),
+                    host=os.getenv('MYSQL_HOST', ''),
+                    user=os.getenv('MYSQL_USER', ''),
+                    password=os.getenv('MYSQL_PASSWORD', ''),
+                    port=int(os.getenv('MYSQL_PORT', 3306)),
                     database='sql_classroom',
                     connect_timeout=30
                 )
@@ -2181,10 +2181,10 @@ def preview_question():
                     
                     # Try to connect to the database
                     connection = pymysql.connect(
-                        host=os.environ.get('MYSQL_HOST', ''),
-                        user=os.environ.get('MYSQL_USER', ''),
-                        password=os.environ.get('MYSQL_PASSWORD', ''),
-                        port=int(os.environ.get('MYSQL_PORT', 3306)),
+                        host=os.getenv('MYSQL_HOST', ''),
+                        user=os.getenv('MYSQL_USER', ''),
+                        password=os.getenv('MYSQL_PASSWORD', ''),
+                        port=int(os.getenv('MYSQL_PORT', 3306)),
                         database=mysql_db_name,
                         cursorclass=pymysql.cursors.DictCursor
                     )
@@ -2200,10 +2200,10 @@ def preview_question():
                     
                     # Connect to SQL classroom database first
                     connection = pymysql.connect(
-                        host=os.environ.get('MYSQL_HOST', ''),
-                        user=os.environ.get('MYSQL_USER', ''),
-                        password=os.environ.get('MYSQL_PASSWORD', ''),
-                        port=int(os.environ.get('MYSQL_PORT', 3306)),
+                        host=os.getenv('MYSQL_HOST', ''),
+                        user=os.getenv('MYSQL_USER', ''),
+                        password=os.getenv('MYSQL_PASSWORD', ''),
+                        port=int(os.getenv('MYSQL_PORT', 3306)),
                         database='sql_classroom',
                         cursorclass=pymysql.cursors.DictCursor
                     )
@@ -2358,19 +2358,19 @@ def preview_question():
                     # Re-establish connection
                     if db_type == 'mysql':
                         connection = pymysql.connect(
-                            host=os.environ.get('MYSQL_HOST', ''),
-                            user=os.environ.get('MYSQL_USER', ''),
-                            password=os.environ.get('MYSQL_PASSWORD', ''),
-                            port=int(os.environ.get('MYSQL_PORT', 3306)),
+                            host=os.getenv('MYSQL_HOST', ''),
+                            user=os.getenv('MYSQL_USER', ''),
+                            password=os.getenv('MYSQL_PASSWORD', ''),
+                            port=int(os.getenv('MYSQL_PORT', 3306)),
                             database=mysql_db_name,
                             cursorclass=pymysql.cursors.DictCursor
                         )
                     else:
                         connection = pymysql.connect(
-                            host=os.environ.get('MYSQL_HOST', ''),
-                            user=os.environ.get('MYSQL_USER', ''),
-                            password=os.environ.get('MYSQL_PASSWORD', ''),
-                            port=int(os.environ.get('MYSQL_PORT', 3306)),
+                            host=os.getenv('MYSQL_HOST', ''),
+                            user=os.getenv('MYSQL_USER', ''),
+                            password=os.getenv('MYSQL_PASSWORD', ''),
+                            port=int(os.getenv('MYSQL_PORT', 3306)),
                             database='sql_classroom',
                             cursorclass=pymysql.cursors.DictCursor
                         )
@@ -2980,10 +2980,10 @@ def playground_execute():
         try:
             # Connect to MySQL using the actual database name (may be sql_classroom for schema access)
             conn = pymysql.connect(
-                host=os.environ.get('MYSQL_HOST', ''),
-                user=os.environ.get('MYSQL_USER', ''),
-                password=os.environ.get('MYSQL_PASSWORD', ''),
-                port=int(os.environ.get('MYSQL_PORT', 3306)),
+                host=os.getenv('MYSQL_HOST', ''),
+                user=os.getenv('MYSQL_USER', ''),
+                password=os.getenv('MYSQL_PASSWORD', ''),
+                port=int(os.getenv('MYSQL_PORT', 3306)),
                 database=actual_database_name,
                 cursorclass=pymysql.cursors.DictCursor
             )
@@ -3111,10 +3111,10 @@ def get_available_databases():
         # Fallback: if no allowed databases configured and no teacher schemas,
         # return all databases except system ones (backward compatibility)
         conn = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', ''),
-            user=os.environ.get('MYSQL_USER', ''),
-            password=os.environ.get('MYSQL_PASSWORD', ''),
-            port=int(os.environ.get('MYSQL_PORT', 3306)),
+            host=os.getenv('MYSQL_HOST', ''),
+            user=os.getenv('MYSQL_USER', ''),
+            password=os.getenv('MYSQL_PASSWORD', ''),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
             cursorclass=pymysql.cursors.DictCursor
         )
         
