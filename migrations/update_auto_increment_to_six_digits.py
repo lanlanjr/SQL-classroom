@@ -19,7 +19,7 @@ def run_migration():
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
             port=os.getenv('MYSQL_PORT', 3306),
-            database=os.getenv('APP_DB_NAME', 'sql_classroom'),
+            database=os.getenv('APP_DB_NAME', ''),
             connect_timeout=30
         )
         

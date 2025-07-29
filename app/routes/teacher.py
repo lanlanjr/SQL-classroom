@@ -1496,7 +1496,8 @@ def use_schema(schema_id):
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
             port=os.getenv('MYSQL_PORT', 3306),
-            database='sql_classroom',
+            # database='sql_classroom',
+            database=os.getenv('APP_DB_NAME', ''),
             connect_timeout=30
         )
         
@@ -1629,7 +1630,7 @@ def use_schema(schema_id):
                 permission_errors = 0
                 for table in created_tables:
                     try:
-                        grant_stmt = f"GRANT SELECT ON `sql_classroom`.`{table}` TO 'sql_student'@{os.getenv('APP_DB_NAME', '')}"
+                        grant_stmt = f"GRANT SELECT ON `{os.getenv('APP_DB_NAME', '')}`.`{table}` TO 'sql_student'@{os.getenv('APP_DB_NAME', '')}"
                         cursor.execute(grant_stmt)
                         permissions_granted += 1
                         debug_log.append(f"Granted SELECT permission on table: {table}")
@@ -1712,7 +1713,8 @@ def delete_schema(schema_id):
                     user=os.getenv('MYSQL_USER', ''),
                     password=os.getenv('MYSQL_PASSWORD', ''),
                     port=os.getenv('MYSQL_PORT', 3306),
-                    database='sql_classroom',  # Connect to sql_classroom database
+                    # database='sql_classroom',  # Connect to sql_classroom database
+                    database=os.getenv('APP_DB_NAME', ''),  # Connect to sql_classroom database
                     connect_timeout=30
                 )
                 
@@ -1783,7 +1785,8 @@ def schema_monitor():
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
             port=os.getenv('MYSQL_PORT', 3306),
-            database='sql_classroom',
+            # database='sql_classroom',
+            database=os.getenv('APP_DB_NAME', ''),
             connect_timeout=30
         )
         
@@ -1804,7 +1807,7 @@ def schema_monitor():
                             cursor.execute(f"""
                                 SELECT ROUND(((data_length + index_length) / 1024 / 1024), 2) AS 'size_mb'
                                 FROM information_schema.TABLES 
-                                WHERE table_schema='sql_classroom' AND table_name='{table}'
+                                WHERE table_schema='{os.getenv('APP_DB_NAME', '')}' AND table_name='{table}'
                             """)
                             result = cursor.fetchone()
                             if result and result[0]:
@@ -1867,7 +1870,8 @@ def debug_question(question_id):
                     user=os.getenv('MYSQL_USER', ''),
                     password=os.getenv('MYSQL_PASSWORD', ''),
                     port=os.getenv('MYSQL_PORT', 3306),
-                    database='sql_classroom',
+                    # database='sql_classroom',
+                    database=os.getenv('APP_DB_NAME', ''),
                     connect_timeout=30
                 )
                 
@@ -1977,7 +1981,8 @@ def test_schema_query():
                         user=os.getenv('MYSQL_USER', ''),
                         password=os.getenv('MYSQL_PASSWORD', ''),
                         port=os.getenv('MYSQL_PORT', 3306),
-                        database='sql_classroom',
+                        # database='sql_classroom',
+                        database=os.getenv('APP_DB_NAME', ''),
                         cursorclass=pymysql.cursors.DictCursor
                     )
                     
@@ -2038,7 +2043,8 @@ def schema_status():
                     user=os.getenv('MYSQL_USER', ''),
                     password=os.getenv('MYSQL_PASSWORD', ''),
                     port=os.getenv('MYSQL_PORT', 3306),
-                    database='sql_classroom',
+                    # database='sql_classroom',
+                    database=os.getenv('APP_DB_NAME', ''),  
                     connect_timeout=30
                 )
                 
@@ -2204,7 +2210,8 @@ def preview_question():
                         user=os.getenv('MYSQL_USER', ''),
                         password=os.getenv('MYSQL_PASSWORD', ''),
                         port=os.getenv('MYSQL_PORT', 3306),
-                        database='sql_classroom',
+                        # database='sql_classroom',
+                        database=os.getenv('APP_DB_NAME', ''),
                         cursorclass=pymysql.cursors.DictCursor
                     )
                     
@@ -2371,7 +2378,8 @@ def preview_question():
                             user=os.getenv('MYSQL_USER', ''),
                             password=os.getenv('MYSQL_PASSWORD', ''),
                             port=os.getenv('MYSQL_PORT', 3306),
-                            database='sql_classroom',
+                            # database='sql_classroom',
+                            database=os.getenv('APP_DB_NAME', ''),
                             cursorclass=pymysql.cursors.DictCursor
                         )
                         
@@ -2939,7 +2947,8 @@ def playground_execute():
             if teacher_schema:
                 is_teacher_schema_access = True
                 selected_schema = teacher_schema
-                actual_database_name = 'sql_classroom'  # Connect to sql_classroom for schema access
+                # actual_database_name = 'sql_classroom'  # Connect to sql_classroom for schema access
+                actual_database_name = os.getenv('APP_DB_NAME', '')  # Connect to sql_classroom for schema access
         
         # Allow access if it's an allowed database OR teacher's own schema
         if not (is_allowed_database or is_teacher_schema_access):

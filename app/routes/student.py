@@ -395,7 +395,8 @@ def get_student_db_connection(question):
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
             port=os.getenv('MYSQL_PORT', 3306),
-            database='sql_classroom',
+            # database='sql_classroom',
+            database=os.getenv('APP_DB_NAME', ''),
             cursorclass=pymysql.cursors.DictCursor
         )
         

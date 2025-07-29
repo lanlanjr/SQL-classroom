@@ -3,6 +3,7 @@ Utility functions for the SQL Classroom application.
 """
 
 import logging
+import os
 
 def validate_dql_only_query(query):
     """
@@ -337,7 +338,8 @@ def process_show_tables_result_for_schema(columns, data, database_name, user_id,
         tuple: (modified_columns, modified_data) or (columns, data) if no schema match
     """
     # Only process if database is sql_classroom (where imported schemas are stored)
-    if database_name != 'sql_classroom':
+    # if database_name != 'sql_classroom': 
+    if database_name != os.getenv('APP_DB_NAME', ''): 
         return columns, data
     
     # Import here to avoid circular imports

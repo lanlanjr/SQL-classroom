@@ -1,5 +1,6 @@
 from app import db
 from datetime import datetime
+import os
 
 class Question(db.Model):
     __tablename__ = 'questions'
@@ -33,7 +34,8 @@ class Question(db.Model):
     def get_schema_name(self):
         """Get the actual schema/database name to use for this question"""
         if self.db_type == 'imported_schema' and self.schema_import:
-            return 'sql_classroom'  # Always use the sql_classroom database
+            # return 'sql_classroom'  # Always use the sql_classroom database
+            return os.getenv('APP_DB_NAME', '')
         return self.mysql_db_name
 
     def get_table_prefix(self):
