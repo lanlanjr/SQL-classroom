@@ -174,8 +174,9 @@
                     <div class="mb-3">
                         <label for="database-name" class="form-label">Database Name</label>
                         <div class="input-group">
-                            <input type="text" class="form-control" id="database-name" placeholder="Enter database name" list="database-list">
-                            <datalist id="database-list"></datalist>
+                            <select class="form-control" id="database-name">
+                                <option value="" disabled selected>Select database name</option>
+                            </select>
                             <button type="button" class="btn btn-outline-secondary" id="refresh-databases">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
@@ -322,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const historyList = document.getElementById('history-list');
     const exportCsvBtn = document.getElementById('export-csv');
     const refreshDatabasesBtn = document.getElementById('refresh-databases');
-    const databaseList = document.getElementById('database-list');
+    const databaseSelect = document.getElementById('database-name');
     const clearHistoryBtn = document.getElementById('clear-history');
     
     // Query history array
@@ -338,14 +339,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
-                // Clear existing options
-                databaseList.innerHTML = '';
+                // Clear existing options except the default one
+                databaseSelect.innerHTML = '<option value="" disabled selected>Select database name</option>';
                 
                 // Add options for each database
                 data.databases.forEach(db => {
                     const option = document.createElement('option');
                     option.value = db;
-                    databaseList.appendChild(option);
+                    option.textContent = db;
+                    databaseSelect.appendChild(option);
                 });
             })
             .catch(error => {
@@ -358,12 +360,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Set default database if section has one assigned
     {% if section and section.database_name %}
-    databaseInput.value = "{{ section.database_name }}";
-    // Disable the database input if a database is assigned to the section
-    databaseInput.readOnly = true;
-    databaseInput.style.backgroundColor = '#e9ecef';
-    // Hide the refresh button as database is fixed
-    refreshDatabasesBtn.style.display = 'none';
+    // Wait for databases to load, then set the selected value
+    setTimeout(() => {
+        databaseInput.value = "{{ section.database_name }}";
+        // Disable the database select if a database is assigned to the section
+        databaseInput.disabled = true;
+        databaseInput.style.backgroundColor = '#e9ecef';
+        // Hide the refresh button as database is fixed
+        refreshDatabasesBtn.style.display = 'none';
+    }, 500);
     {% endif %}
     
     // Refresh databases button handler

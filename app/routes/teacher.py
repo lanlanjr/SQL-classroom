@@ -233,7 +233,7 @@ def edit_question(question_id):
                         host=os.getenv('MYSQL_HOST', ''),
                         user=os.getenv('MYSQL_USER', ''),
                         password=os.getenv('MYSQL_PASSWORD', ''),
-                        port=os.getenv('MYSQL_PORT', 3306),
+                        port=int(os.getenv('MYSQL_PORT', 3306)),
                         database=mysql_db_name
                     )
 
@@ -1495,7 +1495,7 @@ def use_schema(schema_id):
             host=os.getenv('MYSQL_HOST', ''),
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
-            port=os.getenv('MYSQL_PORT', 3306),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
             # database='sql_classroom',
             database=os.getenv('APP_DB_NAME', ''),
             connect_timeout=30
@@ -1712,7 +1712,7 @@ def delete_schema(schema_id):
                     host=os.getenv('MYSQL_HOST', ''),
                     user=os.getenv('MYSQL_USER', ''),
                     password=os.getenv('MYSQL_PASSWORD', ''),
-                    port=os.getenv('MYSQL_PORT', 3306),
+                    port=int(os.getenv('MYSQL_PORT', 3306)),
                     # database='sql_classroom',  # Connect to sql_classroom database
                     database=os.getenv('APP_DB_NAME', ''),  # Connect to sql_classroom database
                     connect_timeout=30
@@ -1784,7 +1784,7 @@ def schema_monitor():
             host=os.getenv('MYSQL_HOST', ''),
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
-            port=os.getenv('MYSQL_PORT', 3306),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
             # database='sql_classroom',
             database=os.getenv('APP_DB_NAME', ''),
             connect_timeout=30
@@ -1869,7 +1869,7 @@ def debug_question(question_id):
                     host=os.getenv('MYSQL_HOST', ''),
                     user=os.getenv('MYSQL_USER', ''),
                     password=os.getenv('MYSQL_PASSWORD', ''),
-                    port=os.getenv('MYSQL_PORT', 3306),
+                    port=int(os.getenv('MYSQL_PORT', 3306)),
                     # database='sql_classroom',
                     database=os.getenv('APP_DB_NAME', ''),
                     connect_timeout=30
@@ -1980,7 +1980,7 @@ def test_schema_query():
                         host=os.getenv('MYSQL_HOST', ''),
                         user=os.getenv('MYSQL_USER', ''),
                         password=os.getenv('MYSQL_PASSWORD', ''),
-                        port=os.getenv('MYSQL_PORT', 3306),
+                        port=int(os.getenv('MYSQL_PORT', 3306)),
                         # database='sql_classroom',
                         database=os.getenv('APP_DB_NAME', ''),
                         cursorclass=pymysql.cursors.DictCursor
@@ -2042,7 +2042,7 @@ def schema_status():
                     host=os.getenv('MYSQL_HOST', ''),
                     user=os.getenv('MYSQL_USER', ''),
                     password=os.getenv('MYSQL_PASSWORD', ''),
-                    port=os.getenv('MYSQL_PORT', 3306),
+                    port=int(os.getenv('MYSQL_PORT', 3306)),
                     # database='sql_classroom',
                     database=os.getenv('APP_DB_NAME', ''),  
                     connect_timeout=30
@@ -2190,7 +2190,7 @@ def preview_question():
                         host=os.getenv('MYSQL_HOST', ''),
                         user=os.getenv('MYSQL_USER', ''),
                         password=os.getenv('MYSQL_PASSWORD', ''),
-                        port=os.getenv('MYSQL_PORT', 3306),
+                        port=int(os.getenv('MYSQL_PORT', 3306)),
                         database=mysql_db_name,
                         cursorclass=pymysql.cursors.DictCursor
                     )
@@ -2209,7 +2209,7 @@ def preview_question():
                         host=os.getenv('MYSQL_HOST', ''),
                         user=os.getenv('MYSQL_USER', ''),
                         password=os.getenv('MYSQL_PASSWORD', ''),
-                        port=os.getenv('MYSQL_PORT', 3306),
+                        port=int(os.getenv('MYSQL_PORT', 3306)),
                         # database='sql_classroom',
                         database=os.getenv('APP_DB_NAME', ''),
                         cursorclass=pymysql.cursors.DictCursor
@@ -2368,7 +2368,7 @@ def preview_question():
                             host=os.getenv('MYSQL_HOST', ''),
                             user=os.getenv('MYSQL_USER', ''),
                             password=os.getenv('MYSQL_PASSWORD', ''),
-                            port=os.getenv('MYSQL_PORT', 3306),
+                            port=int(os.getenv('MYSQL_PORT', 3306)),
                             database=mysql_db_name,
                             cursorclass=pymysql.cursors.DictCursor
                         )
@@ -2377,7 +2377,7 @@ def preview_question():
                             host=os.getenv('MYSQL_HOST', ''),
                             user=os.getenv('MYSQL_USER', ''),
                             password=os.getenv('MYSQL_PASSWORD', ''),
-                            port=os.getenv('MYSQL_PORT', 3306),
+                            port=int(os.getenv('MYSQL_PORT', 3306)),
                             # database='sql_classroom',
                             database=os.getenv('APP_DB_NAME', ''),
                             cursorclass=pymysql.cursors.DictCursor
@@ -2992,7 +2992,7 @@ def playground_execute():
                 host=os.getenv('MYSQL_HOST', ''),
                 user=os.getenv('MYSQL_USER', ''),
                 password=os.getenv('MYSQL_PASSWORD', ''),
-                port=os.getenv('MYSQL_PORT', 3306),
+                port=int(os.getenv('MYSQL_PORT', 3306)),
                 database=actual_database_name,
                 cursorclass=pymysql.cursors.DictCursor
             )
@@ -3123,7 +3123,7 @@ def get_available_databases():
             host=os.getenv('MYSQL_HOST', ''),
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
-            port=os.getenv('MYSQL_PORT', 3306),
+            port=int(os.getenv('MYSQL_PORT', 3306)),
             cursorclass=pymysql.cursors.DictCursor
         )
         

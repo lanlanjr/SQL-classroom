@@ -166,8 +166,9 @@
                     <div class="mb-3">
                         <label for="database-name" class="form-label">Database Name</label>
                         <div class="input-group">
-                            <input type="text" class="form-control" id="database-name" placeholder="Enter database name" list="database-list">
-                            <datalist id="database-list"></datalist>
+                            <select class="form-control" id="database-name">
+                                <option value="" disabled selected>Select database name</option>
+                            </select>
                             <button type="button" class="btn btn-outline-secondary" id="refresh-databases">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
@@ -315,7 +316,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const historyList = document.getElementById('history-list');
     const exportCsvBtn = document.getElementById('export-csv');
     const refreshDatabasesBtn = document.getElementById('refresh-databases');
-    const databaseList = document.getElementById('database-list');
+    const databaseSelect = document.getElementById('database-name');
     const clearHistoryBtn = document.getElementById('clear-history');
     const templateBtns = document.querySelectorAll('.template-btn');
     const helpText = document.getElementById('query-help-text');
@@ -349,14 +350,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
-                // Clear existing options
-                databaseList.innerHTML = '';
+                // Clear existing options except the default one
+                databaseSelect.innerHTML = '<option value="" disabled selected>Select database name</option>';
                 
                 // Add options for each database
                 data.databases.forEach(db => {
                     const option = document.createElement('option');
                     option.value = db;
-                    databaseList.appendChild(option);
+                    option.textContent = db;
+                    databaseSelect.appendChild(option);
                 });
             })
             .catch(error => {
