@@ -1247,7 +1247,8 @@ def playground_execute():
                     if teacher_schema:
                         is_teacher_schema_access = True
                         selected_schema = teacher_schema
-                        actual_database_name = 'sql_classroom'  # Connect to sql_classroom for schema access
+                        # actual_database_name = 'sql_classroom'  # Connect to sql_classroom for schema access
+                        actual_database_name = os.getenv('APP_DB_NAME', '')
             except Exception as e:
                 logging.error(f"Error checking teacher schema access: {e}")
 
