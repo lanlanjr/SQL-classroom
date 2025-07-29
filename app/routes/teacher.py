@@ -1650,7 +1650,7 @@ def use_schema(schema_id):
             else:
                 debug_log.append("ℹ️  Permission granting disabled via configuration")
             
-            cursor.execute("FLUSH PRIVILEGES")
+            # cursor.execute("FLUSH PRIVILEGES")
             connection.commit()
             debug_log.append("Committed transaction and flushed privileges")
             
