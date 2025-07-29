@@ -391,9 +391,9 @@ def get_student_db_connection(question):
             
         # Connect to the sql_classroom database using root user
         conn = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_USER', 'root'),
-            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            host=os.environ.get('MYSQL_HOST', ''),
+            user=os.environ.get('MYSQL_USER', ''),
+            password=os.environ.get('MYSQL_PASSWORD', ''),
             port=int(os.environ.get('MYSQL_PORT', 3306)),
             database='sql_classroom',
             cursorclass=pymysql.cursors.DictCursor
@@ -412,9 +412,9 @@ def get_student_db_connection(question):
             
             # Connect using root user
             conn = pymysql.connect(
-                host=os.environ.get('MYSQL_HOST', 'localhost'),
-                user=os.environ.get('MYSQL_USER', 'root'),
-                password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                host=os.environ.get('MYSQL_HOST', ''),
+                user=os.environ.get('MYSQL_USER', ''),
+                password=os.environ.get('MYSQL_PASSWORD', ''),
                 port=int(os.environ.get('MYSQL_PORT', 3306)),
                 cursorclass=pymysql.cursors.DictCursor
             )
@@ -1291,9 +1291,9 @@ def playground_execute():
         try:
             # Connect to MySQL using the provided database name (actual_database_name)
             conn = pymysql.connect(
-                host=os.environ.get('MYSQL_HOST', 'localhost'),
-                user=os.environ.get('MYSQL_USER', 'root'),
-                password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                host=os.environ.get('MYSQL_HOST', ''),
+                user=os.environ.get('MYSQL_USER', ''),
+                password=os.environ.get('MYSQL_PASSWORD', ''),
                 port=int(os.environ.get('MYSQL_PORT', 3306)),
                 database=actual_database_name,
                 cursorclass=pymysql.cursors.DictCursor
@@ -1430,9 +1430,9 @@ def get_available_databases():
         # Fallback: if no allowed databases configured and no teacher schemas, 
         # return all databases except system ones (backward compatibility)
         conn = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_USER', 'root'),
-            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            host=os.environ.get('MYSQL_HOST', ''),
+            user=os.environ.get('MYSQL_USER', ''),
+            password=os.environ.get('MYSQL_PASSWORD', ''),
             port=int(os.environ.get('MYSQL_PORT', 3306)),
             cursorclass=pymysql.cursors.DictCursor
         )

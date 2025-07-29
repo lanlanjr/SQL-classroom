@@ -665,9 +665,9 @@ def manage_allowed_databases():
             # Check if database actually exists
             try:
                 conn = pymysql.connect(
-                    host=os.environ.get('MYSQL_HOST', 'localhost'),
-                    user=os.environ.get('MYSQL_USER', 'root'),
-                    password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+                    host=os.environ.get('MYSQL_HOST', ''),
+                    user=os.environ.get('MYSQL_USER', ''),
+                    password=os.environ.get('MYSQL_PASSWORD', ''),
                     port=int(os.environ.get('MYSQL_PORT', 3306)),
                     cursorclass=pymysql.cursors.DictCursor
                 )
@@ -730,9 +730,9 @@ def manage_allowed_databases():
     # Get all available databases from MySQL for the dropdown
     try:
         conn = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_USER', 'root'),
-            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            host=os.environ.get('MYSQL_HOST', ''),
+            user=os.environ.get('MYSQL_USER', ''),
+            password=os.environ.get('MYSQL_PASSWORD', ''),
             port=int(os.environ.get('MYSQL_PORT', 3306)),
             cursorclass=pymysql.cursors.DictCursor
         )
@@ -763,9 +763,9 @@ def scan_and_add_databases():
     """Scan MySQL server and add common databases to allowed list"""
     try:
         conn = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_USER', 'root'),
-            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            host=os.environ.get('MYSQL_HOST', ''),
+            user=os.environ.get('MYSQL_USER', ''),
+            password=os.environ.get('MYSQL_PASSWORD', ''),
             port=int(os.environ.get('MYSQL_PORT', 3306)),
             cursorclass=pymysql.cursors.DictCursor
         )

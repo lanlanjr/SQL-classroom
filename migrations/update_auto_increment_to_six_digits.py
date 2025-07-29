@@ -15,9 +15,9 @@ def run_migration():
     try:
         # Connect directly to MySQL
         connection = pymysql.connect(
-            host=os.environ.get('MYSQL_HOST', 'localhost'),
-            user=os.environ.get('MYSQL_USER', 'root'),
-            password=os.environ.get('MYSQL_PASSWORD', 'admin'),
+            host=os.environ.get('MYSQL_HOST', ''),
+            user=os.environ.get('MYSQL_USER', ''),
+            password=os.environ.get('MYSQL_PASSWORD', ''),
             port=int(os.environ.get('MYSQL_PORT', 3306)),
             database=os.environ.get('APP_DB_NAME', 'sql_classroom'),
             connect_timeout=30
