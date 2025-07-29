@@ -668,7 +668,7 @@ def manage_allowed_databases():
                     host=os.getenv('MYSQL_HOST', ''),
                     user=os.getenv('MYSQL_USER', ''),
                     password=os.getenv('MYSQL_PASSWORD', ''),
-                    port=int(os.getenv('MYSQL_PORT', 3306)),
+                    port=os.getenv('MYSQL_PORT', 3306),
                     cursorclass=pymysql.cursors.DictCursor
                 )
                 
@@ -733,7 +733,7 @@ def manage_allowed_databases():
             host=os.getenv('MYSQL_HOST', ''),
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
-            port=int(os.getenv('MYSQL_PORT', 3306)),
+            port=os.getenv('MYSQL_PORT', 3306),
             cursorclass=pymysql.cursors.DictCursor
         )
         
@@ -766,7 +766,7 @@ def scan_and_add_databases():
             host=os.getenv('MYSQL_HOST', ''),
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
-            port=int(os.getenv('MYSQL_PORT', 3306)),
+            port=os.getenv('MYSQL_PORT', 3306),
             cursorclass=pymysql.cursors.DictCursor
         )
         

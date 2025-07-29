@@ -394,7 +394,7 @@ def get_student_db_connection(question):
             host=os.getenv('MYSQL_HOST', ''),
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
-            port=int(os.getenv('MYSQL_PORT', 3306)),
+            port=os.getenv('MYSQL_PORT', 3306),
             database='sql_classroom',
             cursorclass=pymysql.cursors.DictCursor
         )
@@ -415,7 +415,7 @@ def get_student_db_connection(question):
                 host=os.getenv('MYSQL_HOST', ''),
                 user=os.getenv('MYSQL_USER', ''),
                 password=os.getenv('MYSQL_PASSWORD', ''),
-                port=int(os.getenv('MYSQL_PORT', 3306)),
+                port=os.getenv('MYSQL_PORT', 3306),
                 cursorclass=pymysql.cursors.DictCursor
             )
             
@@ -1294,7 +1294,7 @@ def playground_execute():
                 host=os.getenv('MYSQL_HOST', ''),
                 user=os.getenv('MYSQL_USER', ''),
                 password=os.getenv('MYSQL_PASSWORD', ''),
-                port=int(os.getenv('MYSQL_PORT', 3306)),
+                port=os.getenv('MYSQL_PORT', 3306),
                 database=actual_database_name,
                 cursorclass=pymysql.cursors.DictCursor
             )
@@ -1433,7 +1433,7 @@ def get_available_databases():
             host=os.getenv('MYSQL_HOST', ''),
             user=os.getenv('MYSQL_USER', ''),
             password=os.getenv('MYSQL_PASSWORD', ''),
-            port=int(os.getenv('MYSQL_PORT', 3306)),
+            port=os.getenv('MYSQL_PORT', 3306),
             cursorclass=pymysql.cursors.DictCursor
         )
         
