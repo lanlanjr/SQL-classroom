@@ -227,3 +227,5 @@ The application will be available at http://localhost:5000 (development) or your
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details open for all. 
+
+added new line
